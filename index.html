@@ -12,8 +12,8 @@
 <body>
   <h1>Encode/Decode A=1 → 5-bit Binary</h1>
   <textarea id="inputText" placeholder="Enter text or binary here"></textarea><br>
-  <button onclick="encode()">Encode</button>
-  <button onclick="decode()">Decode</button>
+  <button id="encodeBtn">Encode</button>
+  <button id="decodeBtn">Decode</button>
   <h3>Result:</h3>
   <div id="output"></div>
 
@@ -23,3 +23,18 @@
     }
 
     function encode() {
+      const input = document.getElementById("inputText").value.toUpperCase();
+      const result = input.split("").map(char => {
+        if (char >= 'A' && char <= 'Z') return to5Bit(char.charCodeAt(0) - 64);
+        if (char === ' ') return to5Bit(0);
+        return "?????";
+      }).join(" ");
+      document.getElementById("output").innerText = result;
+    }
+
+    function decode() {
+      const input = document.getElementById("inputText").value.trim();
+      const result = input.split(/\s+/).map(bits => {
+        const n = parseInt(bits, 2);
+        if (n === 0) return " ";
+        if
