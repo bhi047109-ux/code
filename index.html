@@ -8,6 +8,36 @@
     textarea, input { width: 100%; margin-bottom: 10px; font-size: 16px; padding: 6px; }
     button { margin-right: 10px; padding: 8px 16px; font-size: 16px; }
     #output { white-space: pre-wrap; background: #f0f0f0; padding: 10px; font-size: 16px; }
+
+    #shutter {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: linear-gradient(#444, #222);
+      color: white;
+      font-size: 24px;
+      display: none;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      z-index: 9999;
+      animation: shutterDown 1s forwards;
+    }
+
+    @keyframes shutterDown {
+      from { transform: translateY(-100%); }
+      to { transform: translateY(0); }
+    }
+
+    #sorryBtn {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 20px;
+      background: crimson;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -19,10 +49,16 @@
   <h3>Result:</h3>
   <div id="output">Loading key...</div>
 
+  <div id="shutter">
+    <div>🔒 Decoder Locked<br>Unauthorized access detected.</div>
+    <button id="sorryBtn">SORRY</button>
+  </div>
+
   <script>
     let map = {};
     let reverseMap = {};
-    const correctPassword = "5647"; // updated password
+    const correctPassword = "5647";
+    let sorryClicks = 0;
 
     async function loadKey() {
       try {
@@ -36,8 +72,8 @@
     }
 
     function encode() {
-      const input = document.getElementById("inputText").value.toUpperCase();
-      const result = input.split("").map(char => map[char] || '?????????????').join(" ");
+      const input = document.getElementById("inputText").value;
+      const result = input.split("").map(char => map[char.toUpperCase()] || '?????????????').join(" ");
       document.getElementById("output").innerText = result;
     }
 
@@ -45,22 +81,35 @@
       const input = document.getElementById("inputText").value.trim();
       const enteredPassword = document.getElementById("password").value;
 
-      let activeMap = reverseMap;
       if (enteredPassword !== correctPassword) {
-        activeMap = {};
-        input.split(/\s+/).forEach(num => {
-          if (!activeMap[num]) {
-            activeMap[num] = String.fromCharCode(65 + Math.floor(Math.random() * 26));
-          }
-        });
+        document.getElementById("inputText").value = "";
+        document.getElementById("password").value = "";
+        document.getElementById("encodeBtn").disabled = true;
+        document.getElementById("decodeBtn").disabled = true;
+        document.getElementById("shutter").style.display = "flex";
+        return;
       }
 
-      const result = input.split(/\s+/).map(num => activeMap[num] || '?').join("");
+      const result = input.split(/\s+/).map(num => reverseMap[num] || '?').join("");
       document.getElementById("output").innerText = result;
     }
 
     document.getElementById("encodeBtn").onclick = encode;
     document.getElementById("decodeBtn").onclick = decode;
+
+    document.getElementById("sorryBtn").onclick = () => {
+      sorryClicks++;
+      if (sorryClicks >= 10) {
+        document.getElementById("shutter").style.display = "none";
+        document.getElementById("encodeBtn").disabled = false;
+        document.getElementById("decodeBtn").disabled = false;
+        document.getElementById("output").innerText = "Decoder unlocked. Be careful next time.";
+        sorryClicks = 0;
+        document.getElementById("sorryBtn").innerText = "SORRY";
+      } else {
+        document.getElementById("sorryBtn").innerText = `SORRY (${sorryClicks}/10)`;
+      }
+    };
 
     loadKey();
   </script>
