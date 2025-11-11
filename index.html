@@ -1,66 +1,64 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>5-bit Binary Encoder/Decoder</title>
+  <title>Random Number Encoder/Decoder</title>
   <style>
-    body {
-      font-family: sans-serif;
-      padding: 20px;
-      max-width: 600px;
-      margin: auto;
-    }
-    textarea {
-      width: 100%;
-      height: 100px;
-      margin-bottom: 10px;
-      font-size: 16px;
-    }
-    button {
-      margin-right: 10px;
-      padding: 8px 16px;
-      font-size: 16px;
-    }
-    #output {
-      white-space: pre-wrap;
-      background: #f0f0f0;
-      padding: 10px;
-      margin-top: 10px;
-      font-size: 16px;
-    }
+    body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+    textarea { width: 100%; height: 100px; margin-bottom: 10px; font-size: 16px; }
+    button { margin-right: 10px; padding: 8px 16px; font-size: 16px; }
+    #output { white-space: pre-wrap; background: #f0f0f0; padding: 10px; font-size: 16px; }
   </style>
 </head>
 <body>
-  <h1>Encode/Decode A=1 → 5-bit Binary</h1>
-  <textarea id="inputText" placeholder="Enter text or binary here"></textarea><br>
+  <h1>Random Number Encoder/Decoder</h1>
+  <textarea id="inputText" placeholder="Enter text or encoded numbers here"></textarea><br>
   <button id="encodeBtn">Encode</button>
   <button id="decodeBtn">Decode</button>
   <h3>Result:</h3>
   <div id="output"></div>
 
   <script>
-    function to5Bit(n) {
-      return n.toString(2).padStart(5, '0');
-    }
+    const map = {
+      'A': '1312324335795',
+      'B': '9823472342342',
+      'C': '2342342342341',
+      'D': '8237498237498',
+      'E': '1234567890123',
+      'F': '9988776655443',
+      'G': '1122334455667',
+      'H': '7766554433221',
+      'I': '3141592653589',
+      'J': '2718281828459',
+      'K': '1618033988749',
+      'L': '1010101010101',
+      'M': '2020202020202',
+      'N': '3030303030303',
+      'O': '4040404040404',
+      'P': '5050505050505',
+      'Q': '6060606060606',
+      'R': '7070707070707',
+      'S': '8080808080808',
+      'T': '9090909090909',
+      'U': '1111111111111',
+      'V': '2222222222222',
+      'W': '3333333333333',
+      'X': '4444444444444',
+      'Y': '5555555555555',
+      'Z': '6666666666666',
+      ' ': '0000000000000'
+    };
+
+    const reverseMap = Object.fromEntries(Object.entries(map).map(([k, v]) => [v, k]));
 
     function encode() {
       const input = document.getElementById("inputText").value.toUpperCase();
-      const result = input.split("").map(char => {
-        if (char >= 'A' && char <= 'Z') return to5Bit(char.charCodeAt(0) - 64);
-        if (char === ' ') return to5Bit(0);
-        return "?????";
-      }).join(" ");
+      const result = input.split("").map(char => map[char] || '?????????????').join(" ");
       document.getElementById("output").innerText = result;
     }
 
     function decode() {
       const input = document.getElementById("inputText").value.trim();
-      const result = input.split(/\s+/).map(bits => {
-        const n = parseInt(bits, 2);
-        if (n === 0) return " ";
-        if (n >= 1 && n <= 26) return String.fromCharCode(n + 64);
-        return "?";
-      }).join("");
+      const result = input.split(/\s+/).map(num => reverseMap[num] || '?').join("");
       document.getElementById("output").innerText = result;
     }
 
