@@ -22,7 +22,7 @@
   <script>
     let map = {};
     let reverseMap = {};
-    const correctPassword = "momo";
+    const correctPassword = "5647"; // updated password
 
     async function loadKey() {
       try {
@@ -47,7 +47,6 @@
 
       let activeMap = reverseMap;
       if (enteredPassword !== correctPassword) {
-        // Use fake map: assign random letters to each number
         activeMap = {};
         input.split(/\s+/).forEach(num => {
           if (!activeMap[num]) {
