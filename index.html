@@ -57,8 +57,13 @@
   <script>
     let map = {};
     let reverseMap = {};
-    const correctPassword = "5647";
     let sorryClicks = 0;
+
+    const validPasswords = {
+      "tanis": "Tanis",
+      "jai": "Jai",
+      "xander": "Xander"
+    };
 
     async function loadKey() {
       try {
@@ -79,9 +84,9 @@
 
     function decode() {
       const input = document.getElementById("inputText").value.trim();
-      const enteredPassword = document.getElementById("password").value;
+      const enteredPassword = document.getElementById("password").value.toLowerCase();
 
-      if (enteredPassword !== correctPassword) {
+      if (!(enteredPassword in validPasswords)) {
         document.getElementById("inputText").value = "";
         document.getElementById("password").value = "";
         document.getElementById("encodeBtn").disabled = true;
@@ -90,8 +95,9 @@
         return;
       }
 
+      const userName = validPasswords[enteredPassword];
       const result = input.split(/\s+/).map(num => reverseMap[num] || '?').join("");
-      document.getElementById("output").innerText = result;
+      document.getElementById("output").innerText = `Welcome, ${userName}!\n\n${result}`;
     }
 
     document.getElementById("encodeBtn").onclick = encode;
@@ -103,7 +109,7 @@
         document.getElementById("shutter").style.display = "none";
         document.getElementById("encodeBtn").disabled = false;
         document.getElementById("decodeBtn").disabled = false;
-        document.getElementById("output").innerText = "Decoder unlocked. Be careful next time.";
+        document.getElementById("output").innerText = "Decoder unlocked. Please enter a valid password.";
         sorryClicks = 0;
         document.getElementById("sorryBtn").innerText = "SORRY";
       } else {
