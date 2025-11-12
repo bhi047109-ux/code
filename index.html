@@ -64,6 +64,7 @@
   </style>
 </head>
 <body>
+  <!-- Login screen -->
   <div id="loginScreen">
     <h2>Enter Access Password</h2>
     <input type="password" id="sitePassword" placeholder="Site password">
@@ -71,6 +72,7 @@
     <div id="loginError" style="color:red; margin-top:10px;"></div>
   </div>
 
+  <!-- Main app (hidden until login succeeds) -->
   <div id="mainApp" style="display:none;">
     <h1>Multi-Channel Encoder/Decoder</h1>
     <input type="password" id="password" placeholder="Enter user password">
@@ -98,8 +100,9 @@
     </div>
   </div>
 
+  <!-- Script block at the bottom -->
   <script>
-    const siteAccessPassword = "letmein"; // Change this to your real site password
+    const siteAccessPassword = "letmein"; // change this to your site password
     const validPasswords = {
       "tanis": "Tanis",
       "jai": "Jai",
@@ -115,6 +118,7 @@
     let sorryClicks = 0;
     let isLocked = false;
 
+    // ✅ This is now defined before the button calls it
     function checkSitePassword() {
       const entered = document.getElementById("sitePassword").value;
       if (entered === siteAccessPassword) {
@@ -195,6 +199,15 @@
     document.getElementById("encodeBtn").onclick = encode;
     document.getElementById("decodeBtn").onclick = decode;
 
+    document.getElementById("alertBtn").onclick = async () => {
+      await fetch('update-alert.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alert: true })
+      });
+      document.getElementById("output").innerText = "⚠️ Alert sent. Jai will be notified.";
+    };
+
     document.getElementById("sorryBtn").onclick = () => {
       sorryClicks++;
       if (sorryClicks >= 10) {
@@ -217,7 +230,4 @@
         await fetch('update-lock.php', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ locked: newLock })
-        });
-        document.getElementById("lockStatus").innerText = newLock
-          ? "🔒 Site is now locked."
+          body: JSON.stringify({ locked:
