@@ -1,89 +1,53 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Secure Decoder</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" href="data:,"> <!-- Silences favicon 404 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:,">
   <style>
-    body {
-      font-family: sans-serif;
-      padding: 20px;
-      max-width: 600px;
-      margin: auto;
-    }
-    textarea, input, select {
-      width: 100%;
-      margin-bottom: 10px;
-      font-size: 16px;
-      padding: 6px;
-    }
-    button {
-      margin-right: 10px;
-      padding: 8px 16px;
-      font-size: 16px;
-    }
-    #output {
-      white-space: pre-wrap;
-      background: #f0f0f0;
-      padding: 10px;
-      font-size: 16px;
-    }
+    body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+    textarea, input, select { width: 100%; margin-bottom: 10px; font-size: 16px; padding: 6px; }
+    button { margin-right: 10px; padding: 8px 16px; font-size: 16px; }
+    #output { white-space: pre-wrap; background: #f0f0f0; padding: 10px; font-size: 16px; }
     #shutter {
-      position: fixed;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       background: repeating-linear-gradient(90deg, #222 0px, #333 10px, #222 20px);
-      color: white;
-      font-size: 24px;
-      display: none;
-      justify-content: center;
-      align-items: center;
-      flex-direction: column;
-      z-index: 9999;
-      animation: shutterDown 2.5s ease-in-out forwards;
+      color: white; font-size: 24px; display: none;
+      justify-content: center; align-items: center; flex-direction: column;
+      z-index: 9999; animation: shutterDown 2.5s ease-in-out forwards;
     }
     @keyframes shutterDown {
       from { transform: translateY(-100%); opacity: 0; }
       to { transform: translateY(0); opacity: 1; }
     }
     #sorryBtn {
-      margin-top: 20px;
-      padding: 10px 20px;
-      font-size: 20px;
-      background: crimson;
-      color: white;
-      border: none;
-      cursor: pointer;
+      margin-top: 20px; padding: 10px 20px; font-size: 20px;
+      background: crimson; color: white; border: none; cursor: pointer;
     }
     #adminPanel {
-      display: none;
-      margin-top: 20px;
-      padding: 10px;
-      border: 1px solid #ccc;
-      background: #f9f9f9;
+      display: none; margin-top: 20px; padding: 10px;
+      border: 1px solid #ccc; background: #f9f9f9;
     }
   </style>
 </head>
 <body>
-  <!-- Login screen -->
   <div id="loginScreen">
     <h2>Enter Access Password</h2>
-    <input type="password" id="sitePassword" placeholder="Site password">
+    <input type="password" id="sitePassword" placeholder="Site password" />
     <button onclick="checkSitePassword()">Enter</button>
     <div id="loginError" style="color:red; margin-top:10px;"></div>
   </div>
 
-  <!-- Main app -->
   <div id="mainApp" style="display:none;">
     <h1>Multi-Channel Encoder/Decoder</h1>
-    <input type="password" id="password" placeholder="Enter user password">
+    <input type="password" id="password" placeholder="Enter user password" />
     <select id="channelSelect">
       <option value="ch1">Channel 1</option>
       <option value="ch2">Channel 2</option>
       <option value="ch3">Channel 3</option>
     </select>
-    <textarea id="inputText" placeholder="Enter text or encoded numbers here"></textarea><br>
+    <textarea id="inputText" placeholder="Enter text or encoded numbers here"></textarea><br />
     <button id="encodeBtn">Encode</button>
     <button id="decodeBtn">Decode</button>
     <button id="alertBtn">Teacher Saw It</button>
@@ -97,28 +61,20 @@
     </div>
 
     <div id="shutter">
-      <div>🔒 Decoder Locked<br>Unauthorized access detected.</div>
+      <div>🔒 Decoder Locked<br />Unauthorized access detected.</div>
       <button id="sorryBtn">SORRY</button>
     </div>
   </div>
 
-  <!-- ✅ Script block at the bottom -->
   <script>
     const siteAccessPassword = "letmein";
     const validPasswords = {
-      "tanis": "Tanis",
-      "jai": "Jai",
-      "xander": "Xander",
-      "declan": "Declan",
-      "cruze": "Cruze",
-      "xavier": "Xavier"
+      "tanis": "Tanis", "jai": "Jai", "xander": "Xander",
+      "declan": "Declan", "cruze": "Cruze", "xavier": "Xavier"
     };
 
-    let keybook = {};
-    let currentChannel = "ch1";
-    let reverseMap = {};
-    let sorryClicks = 0;
-    let isLocked = false;
+    let keybook = {}, currentChannel = "ch1", reverseMap = {};
+    let sorryClicks = 0, isLocked = false;
 
     function checkSitePassword() {
       const entered = document.getElementById("sitePassword").value;
@@ -133,14 +89,14 @@
 
     async function checkLock() {
       try {
-        const response = await fetch('lock.json');
-        const data = await response.json();
+        const res = await fetch('https://code-9v3r.onrender.com/lock.json');
+        const data = await res.json();
         isLocked = data.locked;
         if (isLocked) {
           document.body.innerHTML = `<div style="text-align:center; margin-top:100px; font-size:24px;">
             🔒 This site is currently under lockdown.<br><br>Please check back later.</div>`;
         }
-      } catch (err) {
+      } catch {
         document.getElementById("output").innerText = "Error checking lockdown status.";
       }
     }
@@ -149,11 +105,11 @@
       await checkLock();
       if (isLocked) return;
       try {
-        const response = await fetch('key.json');
-        keybook = await response.json();
+        const res = await fetch('key.json');
+        keybook = await res.json();
         reverseMap = {};
         document.getElementById("output").innerText = "Key loaded. Ready to encode or decode.";
-      } catch (err) {
+      } catch {
         document.getElementById("output").innerText = "Failed to load key file.";
       }
     }
@@ -161,7 +117,7 @@
     function encode() {
       const input = document.getElementById("inputText").value;
       const map = keybook[currentChannel];
-      const result = input.split("").map(char => map[char.toUpperCase()] || '?????????????').join(" ");
+      const result = input.split("").map(c => map[c.toUpperCase()] || '?????????????').join(" ");
       document.getElementById("output").innerText = result;
     }
 
@@ -187,7 +143,7 @@
 
       if (enteredPassword === "jai") {
         document.getElementById("adminPanel").style.display = "block";
-        fetch('alert.json')
+        fetch('https://code-9v3r.onrender.com/alert.json')
           .then(res => res.json())
           .then(data => {
             if (data.alert) {
@@ -201,12 +157,21 @@
     document.getElementById("decodeBtn").onclick = decode;
 
     document.getElementById("alertBtn").onclick = async () => {
-      await fetch('update-alert.php', {
+      await fetch('https://code-9v3r.onrender.com/update-alert.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ alert: true })
       });
       document.getElementById("output").innerText = "⚠️ Alert sent. Jai will be notified.";
+    };
+
+    document.getElementById("toggleLockBtn").onclick = async () => {
+      await fetch('https://code-9v3r.onrender.com/update-lock.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ toggle: true })
+      });
+      document.getElementById("lockStatus").innerText = "🔒 Lock toggled.";
     };
 
     document.getElementById("sorryBtn").onclick = () => {
@@ -217,6 +182,4 @@
         document.getElementById("decodeBtn").disabled = false;
         document.getElementById("output").innerText = "Decoder unlocked. Please enter a valid password.";
         sorryClicks = 0;
-        document.getElementById("sorryBtn").innerText = "SORRY";
-      } else {
-        document.getElementById("sorryBtn").innerText = `
+        document.getElementById("sorryBtn").innerText = "
