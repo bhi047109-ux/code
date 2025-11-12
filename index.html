@@ -32,6 +32,7 @@
   </style>
 </head>
 <body>
+  <!-- Login screen -->
   <div id="loginScreen">
     <h2>Enter Access Password</h2>
     <input type="password" id="sitePassword" placeholder="Site password" />
@@ -39,6 +40,7 @@
     <div id="loginError" style="color:red; margin-top:10px;"></div>
   </div>
 
+  <!-- Main app -->
   <div id="mainApp" style="display:none;">
     <h1>Multi-Channel Encoder/Decoder</h1>
     <input type="password" id="password" placeholder="Enter user password" />
@@ -66,6 +68,7 @@
     </div>
   </div>
 
+  <!-- ✅ Script block at the very end -->
   <script>
     const siteAccessPassword = "letmein";
     const validPasswords = {
@@ -182,4 +185,6 @@
         document.getElementById("decodeBtn").disabled = false;
         document.getElementById("output").innerText = "Decoder unlocked. Please enter a valid password.";
         sorryClicks = 0;
-        document.getElementById("sorryBtn").innerText = "
+        document.getElementById("sorryBtn").innerText = "SORRY";
+      } else {
+        document.getElementById("sorryBtn").innerText = `
