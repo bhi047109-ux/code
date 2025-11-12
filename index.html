@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <title>Secure Decoder</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,"> <!-- Silences favicon 404 -->
   <style>
     body {
       font-family: sans-serif;
@@ -72,7 +74,7 @@
     <div id="loginError" style="color:red; margin-top:10px;"></div>
   </div>
 
-  <!-- Main app (hidden until login succeeds) -->
+  <!-- Main app -->
   <div id="mainApp" style="display:none;">
     <h1>Multi-Channel Encoder/Decoder</h1>
     <input type="password" id="password" placeholder="Enter user password">
@@ -100,9 +102,9 @@
     </div>
   </div>
 
-  <!-- Script block at the bottom -->
+  <!-- ✅ Script block at the bottom -->
   <script>
-    const siteAccessPassword = "letmein"; // change this to your site password
+    const siteAccessPassword = "letmein";
     const validPasswords = {
       "tanis": "Tanis",
       "jai": "Jai",
@@ -118,7 +120,6 @@
     let sorryClicks = 0;
     let isLocked = false;
 
-    // ✅ This is now defined before the button calls it
     function checkSitePassword() {
       const entered = document.getElementById("sitePassword").value;
       if (entered === siteAccessPassword) {
@@ -218,16 +219,4 @@
         sorryClicks = 0;
         document.getElementById("sorryBtn").innerText = "SORRY";
       } else {
-        document.getElementById("sorryBtn").innerText = `SORRY (${sorryClicks}/10)`;
-      }
-    };
-
-    document.getElementById("toggleLockBtn").onclick = async () => {
-      try {
-        const response = await fetch('lock.json');
-        const data = await response.json();
-        const newLock = !data.locked;
-        await fetch('update-lock.php', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ locked:
+        document.getElementById("sorryBtn").innerText = `
