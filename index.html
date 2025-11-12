@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Password-Protected Decoder</title>
+  <title>Multi-Channel Decoder</title>
   <style>
     body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
-    textarea, input { width: 100%; margin-bottom: 10px; font-size: 16px; padding: 6px; }
+    textarea, input, select { width: 100%; margin-bottom: 10px; font-size: 16px; padding: 6px; }
     button { margin-right: 10px; padding: 8px 16px; font-size: 16px; }
     #output { white-space: pre-wrap; background: #f0f0f0; padding: 10px; font-size: 16px; }
 
@@ -41,8 +41,13 @@
   </style>
 </head>
 <body>
-  <h1>Random Number Encoder/Decoder</h1>
+  <h1>Multi-Channel Encoder/Decoder</h1>
   <input type="password" id="password" placeholder="Enter password to decode">
+  <select id="channelSelect">
+    <option value="ch1">Channel 1</option>
+    <option value="ch2">Channel 2</option>
+    <option value="ch3">Channel 3</option>
+  </select>
   <textarea id="inputText" placeholder="Enter text or encoded numbers here"></textarea><br>
   <button id="encodeBtn">Encode</button>
   <button id="decodeBtn">Decode</button>
@@ -55,21 +60,25 @@
   </div>
 
   <script>
-    let map = {};
+    let keybook = {};
+    let currentChannel = "ch1";
     let reverseMap = {};
     let sorryClicks = 0;
 
     const validPasswords = {
       "tanis": "Tanis",
       "jai": "Jai",
-      "xander": "Xander"
+      "xander": "Xander",
+      "declan": "Declan",
+      "cruze": "Cruze",
+      "xavier": "Xavier"
     };
 
     async function loadKey() {
       try {
         const response = await fetch('key.json');
-        map = await response.json();
-        reverseMap = Object.fromEntries(Object.entries(map).map(([k, v]) => [v, k]));
+        keybook = await response.json();
+        reverseMap = {}; // will be set per channel
         document.getElementById("output").innerText = "Key loaded. Ready to encode or decode.";
       } catch (err) {
         document.getElementById("output").innerText = "Failed to load key file.";
@@ -78,6 +87,7 @@
 
     function encode() {
       const input = document.getElementById("inputText").value;
+      const map = keybook[currentChannel];
       const result = input.split("").map(char => map[char.toUpperCase()] || '?????????????').join(" ");
       document.getElementById("output").innerText = result;
     }
@@ -85,6 +95,7 @@
     function decode() {
       const input = document.getElementById("inputText").value.trim();
       const enteredPassword = document.getElementById("password").value.toLowerCase();
+      const selectedChannel = document.getElementById("channelSelect").value;
 
       if (!(enteredPassword in validPasswords)) {
         document.getElementById("inputText").value = "";
@@ -96,6 +107,9 @@
       }
 
       const userName = validPasswords[enteredPassword];
+      currentChannel = (enteredPassword === "jai") ? "ch2" : selectedChannel;
+      reverseMap = Object.fromEntries(Object.entries(keybook[currentChannel]).map(([k, v]) => [v, k]));
+
       const result = input.split(/\s+/).map(num => reverseMap[num] || '?').join("");
       document.getElementById("output").innerText = `Welcome, ${userName}!\n\n${result}`;
     }
