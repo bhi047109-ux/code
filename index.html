@@ -62,6 +62,14 @@
       border: none;
       cursor: pointer;
     }
+
+    #adminPanel {
+      display: none;
+      margin-top: 20px;
+      padding: 10px;
+      border: 1px solid #ccc;
+      background: #f9f9f9;
+    }
   </style>
 </head>
 <body>
@@ -78,6 +86,12 @@
   <h3>Result:</h3>
   <div id="output">Loading key...</div>
 
+  <div id="adminPanel">
+    <h3>Admin Panel</h3>
+    <button id="toggleLockBtn">Toggle Lock</button>
+    <div id="lockStatus"></div>
+  </div>
+
   <div id="shutter">
     <div>🔒 Decoder Locked<br>Unauthorized access detected.</div>
     <button id="sorryBtn">SORRY</button>
@@ -88,6 +102,7 @@
     let currentChannel = "ch1";
     let reverseMap = {};
     let sorryClicks = 0;
+    let isLocked = false;
 
     const validPasswords = {
       "tanis": "Tanis",
@@ -98,7 +113,28 @@
       "xavier": "Xavier"
     };
 
+    async function checkLock() {
+      try {
+        const response = await fetch('lock.json');
+        const data = await response.json();
+        isLocked = data.locked;
+
+        if (isLocked) {
+          document.body.innerHTML = `
+            <div style="text-align:center; margin-top:100px; font-size:24px;">
+              🔒 This site is currently under lockdown.<br><br>
+              Please check back later.
+            </div>`;
+        }
+      } catch (err) {
+        document.getElementById("output").innerText = "Error checking lockdown status.";
+      }
+    }
+
     async function loadKey() {
+      await checkLock();
+      if (isLocked) return;
+
       try {
         const response = await fetch('key.json');
         keybook = await response.json();
@@ -136,8 +172,12 @@
         Object.entries(keybook[currentChannel]).map(([k, v]) => [v, k])
       );
 
-      const result = input.split(/\s+/).map(num => reverseMap[num] || '?').join("");
-      document.getElementById("output").innerText = `Welcome, ${userName}!\n\n${result}`;
+      document.getElementById("output").innerText = `Welcome, ${userName}!\n\n` +
+        input.split(/\s+/).map(num => reverseMap[num] || '?').join("");
+
+      if (enteredPassword === "jai") {
+        document.getElementById("adminPanel").style.display = "block";
+      }
     }
 
     document.getElementById("encodeBtn").onclick = encode;
@@ -157,8 +197,28 @@
       }
     };
 
+    document.getElementById("toggleLockBtn").onclick = async () => {
+      try {
+        const response = await fetch('lock.json');
+        const data = await response.json();
+        const newLock = !data.locked;
+
+        await fetch('update-lock.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ locked: newLock })
+        });
+
+        document.getElementById("lockStatus").innerText = newLock
+          ? "🔒 Site is now locked."
+          : "🔓 Site is now unlocked.";
+      } catch (err) {
+        document.getElementById("lockStatus").innerText = "Error toggling lock.";
+      }
+    };
+
     loadKey();
   </script>
 </body>
 </html>
-vvv
+
