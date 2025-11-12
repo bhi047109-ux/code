@@ -36,7 +36,8 @@
   <div id="loginScreen">
     <h2>Enter Access Password</h2>
     <input type="password" id="sitePassword" placeholder="Site password" />
-    <button onclick="checkSitePassword()">Enter</button>
+    <!-- No inline onclick anymore -->
+    <button id="enterBtn">Enter</button>
     <div id="loginError" style="color:red; margin-top:10px;"></div>
   </div>
 
@@ -68,7 +69,7 @@
     </div>
   </div>
 
-  <!-- ✅ Script block at the very end -->
+  <!-- Script at the very end -->
   <script>
     const siteAccessPassword = "letmein";
     const validPasswords = {
@@ -156,35 +157,44 @@
       }
     }
 
-    document.getElementById("encodeBtn").onclick = encode;
-    document.getElementById("decodeBtn").onclick = decode;
+    // Wire events after DOM is ready (no inline handlers)
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('enterBtn').addEventListener('click', checkSitePassword);
+      document.getElementById('encodeBtn').addEventListener('click', encode);
+      document.getElementById('decodeBtn').addEventListener('click', decode);
 
-    document.getElementById("alertBtn").onclick = async () => {
-      await fetch('https://code-9v3r.onrender.com/update-alert.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ alert: true })
+      document.getElementById('alertBtn').addEventListener('click', async () => {
+        await fetch('https://code-9v3r.onrender.com/update-alert.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ alert: true })
+        });
+        document.getElementById("output").innerText = "⚠️ Alert sent. Jai will be notified.";
       });
-      document.getElementById("output").innerText = "⚠️ Alert sent. Jai will be notified.";
-    };
 
-    document.getElementById("toggleLockBtn").onclick = async () => {
-      await fetch('https://code-9v3r.onrender.com/update-lock.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ toggle: true })
+      document.getElementById('toggleLockBtn').addEventListener('click', async () => {
+        await fetch('https://code-9v3r.onrender.com/update-lock.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ toggle: true })
+        });
+        document.getElementById("lockStatus").innerText = "🔒 Lock toggled.";
       });
-      document.getElementById("lockStatus").innerText = "🔒 Lock toggled.";
-    };
 
-    document.getElementById("sorryBtn").onclick = () => {
-      sorryClicks++;
-      if (sorryClicks >= 10) {
-        document.getElementById("shutter").style.display = "none";
-        document.getElementById("encodeBtn").disabled = false;
-        document.getElementById("decodeBtn").disabled = false;
-        document.getElementById("output").innerText = "Decoder unlocked. Please enter a valid password.";
-        sorryClicks = 0;
-        document.getElementById("sorryBtn").innerText = "SORRY";
-      } else {
-        document.getElementById("sorryBtn").innerText = `
+      document.getElementById('sorryBtn').addEventListener('click', () => {
+        sorryClicks++;
+        if (sorryClicks >= 10) {
+          document.getElementById("shutter").style.display = "none";
+          document.getElementById("encodeBtn").disabled = false;
+          document.getElementById("decodeBtn").disabled = false;
+          document.getElementById("output").innerText = "Decoder unlocked. Please enter a valid password.";
+          sorryClicks = 0;
+          document.getElementById("sorryBtn").innerText = "SORRY";
+        } else {
+          document.getElementById("sorryBtn").innerText = `SORRY (${sorryClicks})`;
+        }
+      });
+    });
+  </script>
+</body>
+</html>
