@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Multi-Channel Decoder</title>
+  <title>Secure Decoder</title>
   <style>
     body {
       font-family: sans-serif;
@@ -27,17 +27,11 @@
       padding: 10px;
       font-size: 16px;
     }
-
     #shutter {
       position: fixed;
       top: 0; left: 0;
       width: 100%; height: 100%;
-      background: repeating-linear-gradient(
-        90deg,
-        #222 0px,
-        #333 10px,
-        #222 20px
-      );
+      background: repeating-linear-gradient(90deg, #222 0px, #333 10px, #222 20px);
       color: white;
       font-size: 24px;
       display: none;
@@ -47,12 +41,10 @@
       z-index: 9999;
       animation: shutterDown 2.5s ease-in-out forwards;
     }
-
     @keyframes shutterDown {
       from { transform: translateY(-100%); opacity: 0; }
       to { transform: translateY(0); opacity: 1; }
     }
-
     #sorryBtn {
       margin-top: 20px;
       padding: 10px 20px;
@@ -62,7 +54,6 @@
       border: none;
       cursor: pointer;
     }
-
     #adminPanel {
       display: none;
       margin-top: 20px;
@@ -73,37 +64,42 @@
   </style>
 </head>
 <body>
-  <h1>Multi-Channel Encoder/Decoder</h1>
-  <input type="password" id="password" placeholder="Enter password to decode">
-  <select id="channelSelect">
-    <option value="ch1">Channel 1</option>
-    <option value="ch2">Channel 2</option>
-    <option value="ch3">Channel 3</option>
-  </select>
-  <textarea id="inputText" placeholder="Enter text or encoded numbers here"></textarea><br>
-  <button id="encodeBtn">Encode</button>
-  <button id="decodeBtn">Decode</button>
-  <h3>Result:</h3>
-  <div id="output">Loading key...</div>
-
-  <div id="adminPanel">
-    <h3>Admin Panel</h3>
-    <button id="toggleLockBtn">Toggle Lock</button>
-    <div id="lockStatus"></div>
+  <div id="loginScreen">
+    <h2>Enter Access Password</h2>
+    <input type="password" id="sitePassword" placeholder="Site password">
+    <button onclick="checkSitePassword()">Enter</button>
+    <div id="loginError" style="color:red; margin-top:10px;"></div>
   </div>
 
-  <div id="shutter">
-    <div>🔒 Decoder Locked<br>Unauthorized access detected.</div>
-    <button id="sorryBtn">SORRY</button>
+  <div id="mainApp" style="display:none;">
+    <h1>Multi-Channel Encoder/Decoder</h1>
+    <input type="password" id="password" placeholder="Enter user password">
+    <select id="channelSelect">
+      <option value="ch1">Channel 1</option>
+      <option value="ch2">Channel 2</option>
+      <option value="ch3">Channel 3</option>
+    </select>
+    <textarea id="inputText" placeholder="Enter text or encoded numbers here"></textarea><br>
+    <button id="encodeBtn">Encode</button>
+    <button id="decodeBtn">Decode</button>
+    <button id="alertBtn">Teacher Saw It</button>
+    <h3>Result:</h3>
+    <div id="output">Loading key...</div>
+
+    <div id="adminPanel">
+      <h3>Admin Panel</h3>
+      <button id="toggleLockBtn">Toggle Lock</button>
+      <div id="lockStatus"></div>
+    </div>
+
+    <div id="shutter">
+      <div>🔒 Decoder Locked<br>Unauthorized access detected.</div>
+      <button id="sorryBtn">SORRY</button>
+    </div>
   </div>
 
   <script>
-    let keybook = {};
-    let currentChannel = "ch1";
-    let reverseMap = {};
-    let sorryClicks = 0;
-    let isLocked = false;
-
+    const siteAccessPassword = "letmein"; // Change this to your real site password
     const validPasswords = {
       "tanis": "Tanis",
       "jai": "Jai",
@@ -113,18 +109,31 @@
       "xavier": "Xavier"
     };
 
+    let keybook = {};
+    let currentChannel = "ch1";
+    let reverseMap = {};
+    let sorryClicks = 0;
+    let isLocked = false;
+
+    function checkSitePassword() {
+      const entered = document.getElementById("sitePassword").value;
+      if (entered === siteAccessPassword) {
+        document.getElementById("loginScreen").style.display = "none";
+        document.getElementById("mainApp").style.display = "block";
+        loadKey();
+      } else {
+        document.getElementById("loginError").innerText = "Incorrect password.";
+      }
+    }
+
     async function checkLock() {
       try {
         const response = await fetch('lock.json');
         const data = await response.json();
         isLocked = data.locked;
-
         if (isLocked) {
-          document.body.innerHTML = `
-            <div style="text-align:center; margin-top:100px; font-size:24px;">
-              🔒 This site is currently under lockdown.<br><br>
-              Please check back later.
-            </div>`;
+          document.body.innerHTML = `<div style="text-align:center; margin-top:100px; font-size:24px;">
+            🔒 This site is currently under lockdown.<br><br>Please check back later.</div>`;
         }
       } catch (err) {
         document.getElementById("output").innerText = "Error checking lockdown status.";
@@ -134,7 +143,6 @@
     async function loadKey() {
       await checkLock();
       if (isLocked) return;
-
       try {
         const response = await fetch('key.json');
         keybook = await response.json();
@@ -168,15 +176,19 @@
 
       const userName = validPasswords[enteredPassword];
       currentChannel = selectedChannel;
-      reverseMap = Object.fromEntries(
-        Object.entries(keybook[currentChannel]).map(([k, v]) => [v, k])
-      );
-
-      document.getElementById("output").innerText = `Welcome, ${userName}!\n\n` +
-        input.split(/\s+/).map(num => reverseMap[num] || '?').join("");
+      reverseMap = Object.fromEntries(Object.entries(keybook[currentChannel]).map(([k, v]) => [v, k]));
+      const result = input.split(/\s+/).map(num => reverseMap[num] || '?').join("");
+      document.getElementById("output").innerText = `Welcome, ${userName}!\n\n${result}`;
 
       if (enteredPassword === "jai") {
         document.getElementById("adminPanel").style.display = "block";
+        fetch('alert.json')
+          .then(res => res.json())
+          .then(data => {
+            if (data.alert) {
+              document.getElementById("lockStatus").innerText = "⚠️ ALERT: Someone clicked 'Teacher Saw It'.";
+            }
+          });
       }
     }
 
@@ -202,23 +214,9 @@
         const response = await fetch('lock.json');
         const data = await response.json();
         const newLock = !data.locked;
-
         await fetch('update-lock.php', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ locked: newLock })
         });
-
         document.getElementById("lockStatus").innerText = newLock
-          ? "🔒 Site is now locked."
-          : "🔓 Site is now unlocked.";
-      } catch (err) {
-        document.getElementById("lockStatus").innerText = "Error toggling lock.";
-      }
-    };
-
-    loadKey();
-  </script>
-</body>
-</html>
-
