@@ -96,6 +96,9 @@
     let isLocked = false;
     let sorryClicks = 0;
 
+    // Make polling handle global and accessible from console (use var to attach to window)
+    var lockPollInterval = null;
+
     // HELPERS
     const $ = id => document.getElementById(id);
     const setOut = txt => { if($('output')) $('output').innerText = txt; };
@@ -177,16 +180,39 @@
       }
     }
 
-    // ENCODE
+    // START/STOP LOCK POLLING (applies lockdown to all clients)
+    function startLockPolling(intervalMs = 2500) {
+      if (window.lockPollInterval) return;
+      window.lockPollInterval = setInterval(() => {
+        fetch(API_BASE + '/lock.json', { cache: 'no-store' })
+          .then(r => { if (!r.ok) throw r; return r.json(); })
+          .then(data => {
+            const newLocked = !!data.locked;
+            if (newLocked !== isLocked) {
+              isLocked = newLocked;
+              applyLockUI();
+            }
+          })
+          .catch(() => { /* ignore transient errors */ });
+      }, intervalMs);
+    }
+
+    function stopLockPolling() {
+      if (!window.lockPollInterval) return;
+      clearInterval(window.lockPollInterval);
+      window.lockPollInterval = null;
+    }
+
+    // ENCODE (safe: preserve code strings exactly)
     function encode(){
       if(!currentChannel || !hasMap(currentChannel)){ setOut("No mapping for selected channel. Load key or choose another channel."); return; }
       const input = ($('inputText').value || '');
       const map = keybook[currentChannel];
-      const out = [...input].map(ch => { const k = ch.toUpperCase(); return map[k] !== undefined ? String(map[k]) : '?'; }).join(' ');
+      const out = [...input].map(ch => { const k = ch.toUpperCase(); return map[k] !== undefined && map[k] !== null ? String(map[k]) : '?'; }).join(' ');
       setOut(out || "[empty]");
     }
 
-    // DECODE (requires re-typed username to match session username)
+    // DECODE (safe: multi-digit tokens, requires re-typed username match to session username)
     function decode(){
       if(!currentChannel || !hasMap(currentChannel)){ setOut("No mapping for selected channel. Load key or choose another channel."); return; }
       const entered = (($('password').value || '').toLowerCase().trim());
@@ -210,7 +236,7 @@
       if(logged === 'jai'){ $('adminPanel').style.display = 'block'; refreshAdminState(); } else { $('adminPanel').style.display = 'none'; }
     }
 
-    // ADMIN ALERT / TOGGLE
+    // ADMIN helpers
     async function refreshAdminState(){
       try {
         const res = await fetch(API_BASE + '/alert.json', { cache: 'no-store' });
@@ -218,6 +244,18 @@
         const d = await res.json();
         if(d.alert) $('lockStatus').innerText = "⚠️ ALERT: Teacher Saw It clicked.";
       } catch (e) { /* ignore */ }
+    }
+
+    // OPTIONAL: guard any cookie API usage (example guard shown)
+    // If your code or console snippets call chrome.cookies (extension API), wrap calls like this:
+    function safeUseChromeCookies(fn) {
+      if (typeof chrome !== 'undefined' && chrome && chrome.cookies) {
+        try { fn(chrome.cookies); } catch (e) { console.warn('chrome.cookies call failed', e); }
+      } else if (typeof browser !== 'undefined' && browser && browser.cookies) {
+        try { fn(browser.cookies); } catch (e) { console.warn('browser.cookies call failed', e); }
+      } else {
+        // page context: no cookie extension API available — ignore or fallback
+      }
     }
 
     // EVENTS
@@ -232,7 +270,9 @@
         $('loginScreen').style.display = 'none';
         $('mainApp').style.display = 'block';
         await checkLock();
-        if(isLocked){ setOut("Site is under lockdown."); return; }
+        if (isLocked) { setOut("Site is under lockdown."); return; }
+        // start polling so all clients pick up server lock changes
+        startLockPolling();
         await loadKey();
       });
 
@@ -241,7 +281,7 @@
         $('loginError').innerText = "Guest: decoding will lock unless username re-typed to match later.";
         $('loginScreen').style.display = 'none';
         $('mainApp').style.display = 'block';
-        checkLock().then(loadKey);
+        checkLock().then(() => { startLockPolling(); loadKey(); });
       });
 
       $('encodeBtn').addEventListener('click', encode);
