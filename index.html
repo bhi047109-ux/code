@@ -1,40 +1,30 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8" />
   <title>Secure Decoder</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="icon" href="data:,">
   <style>
-    body { font-family: sans-serif; padding: 20px; max-width: 640px; margin: auto; }
-    textarea, input, select { width: 100%; margin-bottom: 10px; font-size: 16px; padding: 6px; }
-    button { margin-right: 10px; padding: 8px 16px; font-size: 16px; }
-    #output { white-space: pre-wrap; background: #f0f0f0; padding: 10px; font-size: 16px; min-height: 64px; }
-
-    #adminPanel { display: none; margin-top: 20px; padding: 10px; border: 1px solid #ccc; background: #f9f9f9; }
-
-    #shutter {
-      position: fixed; inset: 0; width: 100%; height: 100%;
-      background: repeating-linear-gradient(90deg, #222 0px, #333 10px, #222 20px);
-      color: white; font-size: 24px; display: none;
-      justify-content: center; align-items: center; flex-direction: column;
-      z-index: 9999; animation: shutterDown 0.6s ease-in-out forwards;
-    }
-    @keyframes shutterDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
-    #sorryBtn { margin-top: 20px; padding: 10px 20px; font-size: 20px; background: crimson; color: white; border: none; cursor: pointer; }
+    body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;padding:20px;max-width:640px;margin:auto}
+    textarea,input,select{width:100%;margin-bottom:10px;font-size:16px;padding:6px}
+    button{margin-right:10px;padding:8px 16px;font-size:16px}
+    #output{white-space:pre-wrap;background:#f0f0f0;padding:10px;font-size:16px;min-height:64px}
+    #adminPanel{display:none;margin-top:20px;padding:10px;border:1px solid #ccc;background:#f9f9f9}
+    #shutter{position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;
+      background:repeating-linear-gradient(90deg,#222 0,#333 10px,#222 20px);color:#fff;font-size:24px;z-index:9999}
+    #sorryBtn{margin-top:20px;padding:10px 20px;font-size:20px;background:crimson;color:#fff;border:0;cursor:pointer}
   </style>
 </head>
 <body>
-  <!-- Login screen -->
   <div id="loginScreen">
     <h2>Enter Access Password</h2>
     <input type="password" id="sitePassword" placeholder="Site password" />
     <button id="enterBtn">Enter</button>
-    <div id="loginError" style="color:red; margin-top:10px;"></div>
+    <div id="loginError" style="color:red;margin-top:10px"></div>
   </div>
 
-  <!-- Main app -->
-  <div id="mainApp" style="display:none;">
+  <div id="mainApp" style="display:none">
     <h1>Multi-Channel Encoder/Decoder</h1>
 
     <input type="password" id="password" placeholder="Enter user password" />
@@ -44,10 +34,12 @@
       <option value="ch3">Channel 3</option>
     </select>
 
-    <textarea id="inputText" placeholder="Enter text or encoded numbers here"></textarea><br />
-    <button id="encodeBtn">Encode</button>
-    <button id="decodeBtn">Decode</button>
-    <button id="alertBtn">Teacher Saw It</button>
+    <textarea id="inputText" placeholder="Enter text or encoded numbers here"></textarea>
+    <div>
+      <button id="encodeBtn">Encode</button>
+      <button id="decodeBtn">Decode</button>
+      <button id="alertBtn">Teacher Saw It</button>
+    </div>
 
     <h3>Result:</h3>
     <div id="output">Loading key...</div>
@@ -55,217 +47,188 @@
     <div id="adminPanel">
       <h3>Admin panel</h3>
       <button id="toggleLockBtn">Toggle Lock</button>
-      <div id="lockStatus" style="margin-top:8px;"></div>
+      <div id="lockStatus" style="margin-top:8px"></div>
     </div>
 
     <div id="shutter">
-      <div>🔒 Decoder Locked<br />Unauthorized access detected.</div>
+      <div>🔒 Decoder Locked — Unauthorized access detected.</div>
       <button id="sorryBtn">SORRY</button>
     </div>
   </div>
 
-  <!-- Script at the very end -->
-  <script>
-    // Access + users
-    const siteAccessPassword = "letmein";
-    const validPasswords = {
-      "tanis": "Tanis", "jai": "Jai", "xander": "Xander",
-      "declan": "Declan", "cruze": "Cruze", "xavier": "Xavier"
-    };
+<script>
+  // Config
+  const siteAccessPassword = "letmein";
+  const validPasswords = {
+    jai: "Jai",
+    declan: "Declan",
+    xander: "Xander",
+    xavier: "Xavier",
+    tanis: "Tanis"
+  };
+  const API = "https://code-9v3r.onrender.com"; // backend host (Render)
+  // State
+  let keybook = {};
+  let currentChannel = "ch1";
+  let reverseMap = {};
+  let isLocked = false;
+  let sorryClicks = 0;
 
-    // State
-    let keybook = {};
-    let currentChannel = "ch1";
-    let reverseMap = {};
-    let isLocked = false;
-    let sorryClicks = 0;
+  // Helpers
+  function hasValidMapFor(channel) {
+    return keybook && keybook[channel] && typeof keybook[channel] === "object" && Object.keys(keybook[channel]).length>0;
+  }
 
-    // Backend base (Render)
-    const API = "https://code-9v3r.onrender.com";
-
-    // Utility
-    function hasValidMap() {
-      const map = keybook?.[currentChannel];
-      return map && typeof map === "object" && Object.keys(map).length > 0;
+  async function checkSitePassword() {
+    const entered = (document.getElementById("sitePassword").value || "").trim();
+    if (entered === siteAccessPassword) {
+      document.getElementById("loginScreen").style.display = "none";
+      document.getElementById("mainApp").style.display = "block";
+      await loadKey();
+    } else {
+      document.getElementById("loginError").innerText = "Incorrect password.";
     }
+  }
 
-    // Flow: site access → load key → check lock
-    async function checkSitePassword() {
-      const entered = (document.getElementById("sitePassword").value || "").trim();
-      if (entered === siteAccessPassword) {
-        document.getElementById("loginScreen").style.display = "none";
-        document.getElementById("mainApp").style.display = "block";
-        await loadKey();
-      } else {
-        document.getElementById("loginError").innerText = "Incorrect password.";
+  async function checkLock() {
+    try {
+      const res = await fetch(API + "/lock.json", {cache:"no-store"});
+      const data = await res.json();
+      isLocked = !!data.locked;
+      document.getElementById("shutter").style.display = isLocked ? "flex" : "none";
+      document.getElementById("encodeBtn").disabled = isLocked;
+      document.getElementById("decodeBtn").disabled = isLocked;
+      const ls = document.getElementById("lockStatus");
+      if (ls) ls.innerText = isLocked ? "🔒 Site is locked." : "🔓 Site is unlocked.";
+    } catch (e) {
+      document.getElementById("output").innerText = "Error checking lock state.";
+    }
+  }
+
+  async function loadKey() {
+    await checkLock();
+    if (isLocked) return;
+    try {
+      const res = await fetch("key.json", {cache:"no-store"});
+      keybook = await res.json();
+      // ensure channelSelect reflects available channels
+      const sel = document.getElementById("channelSelect");
+      const channels = Object.keys(keybook || {});
+      if (channels.length) {
+        // if current channel not found, switch to first
+        if (!channels.includes(currentChannel)) currentChannel = channels[0];
+        // replace select options if they differ (keeps UI in sync)
+        // only replace if set doesn't match
+        const opts = Array.from(sel.options).map(o=>o.value);
+        if (JSON.stringify(opts)!==JSON.stringify(channels.slice(0,opts.length))) {
+          sel.innerHTML = channels.map(c=>`<option value="${c}">${c}</option>`).join("");
+          sel.value = currentChannel;
+        }
       }
+      document.getElementById("output").innerText = hasValidMapFor(currentChannel) ? "Key loaded. Ready." : "Key loaded but channel map empty.";
+    } catch (e) {
+      document.getElementById("output").innerText = "Failed to load key.json.";
     }
+  }
 
-    async function checkLock() {
+  function buildReverseMap(channel) {
+    reverseMap = {};
+    const forward = keybook[channel] || {};
+    for (const [k,v] of Object.entries(forward)) reverseMap[String(v)] = k;
+  }
+
+  function encode() {
+    // use selected channel for encode
+    currentChannel = document.getElementById("channelSelect").value;
+    if (!hasValidMapFor(currentChannel)) {
+      document.getElementById("output").innerText = "No mapping for selected channel. Load key or choose another channel.";
+      return;
+    }
+    const map = keybook[currentChannel];
+    const input = document.getElementById("inputText").value || "";
+    const result = [...input].map(ch => {
+      const K = ch.toUpperCase();
+      return map[K] !== undefined ? map[K] : "?";
+    }).join(" ");
+    document.getElementById("output").innerText = result.trim();
+  }
+
+  function decode() {
+    if (!hasValidMapFor(document.getElementById("channelSelect").value)) {
+      document.getElementById("output").innerText = "No mapping for selected channel. Load key or choose another channel.";
+      return;
+    }
+    const enteredPassword = (document.getElementById("password").value || "").toLowerCase().trim();
+    const selectedChannel = document.getElementById("channelSelect").value;
+    if (!(enteredPassword in validPasswords)) {
+      // invalid user — trigger lockdown
+      document.getElementById("inputText").value = "";
+      document.getElementById("password").value = "";
+      document.getElementById("encodeBtn").disabled = true;
+      document.getElementById("decodeBtn").disabled = true;
+      document.getElementById("shutter").style.display = "flex";
+      return;
+    }
+    // valid user, proceed
+    buildReverseMap(selectedChannel);
+    const input = (document.getElementById("inputText").value || "").trim();
+    const result = input.split(/\s+/).map(tok => reverseMap[tok] || "?").join("");
+    document.getElementById("output").innerText = `Welcome, ${validPasswords[enteredPassword]}!\n\n${result}`;
+
+    // admin behavior for jai
+    if (enteredPassword === "jai") {
+      document.getElementById("adminPanel").style.display = "block";
+      refreshAdminState();
+    } else {
+      document.getElementById("adminPanel").style.display = "none";
+    }
+  }
+
+  async function refreshAdminState() {
+    try {
+      const res = await fetch(API + "/alert.json", {cache:"no-store"});
+      const d = await res.json();
+      if (d.alert) document.getElementById("lockStatus").innerText = "⚠️ ALERT: Teacher Saw It clicked.";
+    } catch {}
+  }
+
+  // Buttons wiring
+  document.addEventListener("DOMContentLoaded", () => {
+    document.getElementById("enterBtn").addEventListener("click", checkSitePassword);
+    document.getElementById("encodeBtn").addEventListener("click", encode);
+    document.getElementById("decodeBtn").addEventListener("click", decode);
+
+    document.getElementById("alertBtn").addEventListener("click", async () => {
       try {
-        const res = await fetch(API + "/lock.json", { cache: "no-store" });
-        const data = await res.json();
-        isLocked = !!data.locked;
-        if (isLocked) {
-          document.getElementById("shutter").style.display = "flex";
-          document.getElementById("encodeBtn").disabled = true;
-          document.getElementById("decodeBtn").disabled = true;
-          const ls = document.getElementById("lockStatus");
-          if (ls) ls.innerText = "🔒 Site is locked.";
-        } else {
-          document.getElementById("shutter").style.display = "none";
-          document.getElementById("encodeBtn").disabled = false;
-          document.getElementById("decodeBtn").disabled = false;
-          const ls = document.getElementById("lockStatus");
-          if (ls) ls.innerText = "🔓 Site is unlocked.";
-        }
-      } catch {
-        document.getElementById("output").innerText = "Error checking lockdown status.";
-      }
-    }
-
-    async function loadKey() {
-      await checkLock();
-      if (isLocked) return;
-      try {
-        const res = await fetch("key.json", { cache: "no-store" });
-        keybook = await res.json();
-
-        // Default to first available channel if current not present
-        if (!keybook[currentChannel]) {
-          const channels = Object.keys(keybook);
-          if (channels.length) {
-            currentChannel = channels[0];
-            const sel = document.getElementById("channelSelect");
-            if (sel) sel.value = currentChannel;
-          }
-        }
-
-        document.getElementById("output").innerText = hasValidMap()
-          ? "Key loaded. Ready to encode or decode."
-          : "Key loaded, but channel map is empty or missing.";
-      } catch {
-        document.getElementById("output").innerText = "Failed to load key file.";
-      }
-    }
-
-    // Encode / Decode
-    function encode() {
-      if (!hasValidMap()) {
-        document.getElementById("output").innerText = "Key not loaded or invalid channel. Please try again.";
-        return;
-      }
-      const input = document.getElementById("inputText").value || "";
-      const map = keybook[currentChannel];
-
-      const result = [...input]
-        .map(c => {
-          const k = c.toUpperCase();
-          return map[k] !== undefined ? map[k] : "?";
-        })
-        .join(" ");
-
-      document.getElementById("output").innerText = result.trim();
-    }
-
-    function decode() {
-      if (!hasValidMap()) {
-        document.getElementById("output").innerText = "Key not loaded or invalid channel. Please try again.";
-        return;
-      }
-      const input = (document.getElementById("inputText").value || "").trim();
-      const enteredPassword = (document.getElementById("password").value || "").toLowerCase();
-      const selectedChannel = document.getElementById("channelSelect").value;
-
-      if (!(enteredPassword in validPasswords)) {
-        document.getElementById("inputText").value = "";
-        document.getElementById("password").value = "";
-        document.getElementById("encodeBtn").disabled = true;
-        document.getElementById("decodeBtn").disabled = true;
-        document.getElementById("shutter").style.display = "flex";
-        return;
-      }
-
-      currentChannel = selectedChannel;
-
-      // Build reverse map safely
-      const forward = keybook[currentChannel];
-      reverseMap = {};
-      for (const [char, code] of Object.entries(forward)) {
-        reverseMap[String(code)] = char;
-      }
-
-      const result = input.split(/\s+/).map(num => reverseMap[num] || "?").join("");
-      const userName = validPasswords[enteredPassword];
-      document.getElementById("output").innerText = `Welcome, ${userName}!\n\n${result}`;
-
-      // Admin shows panel and reads alert state
-      if (enteredPassword === "jai") {
-        document.getElementById("adminPanel").style.display = "block";
-        refreshAdminState();
-      } else {
-        document.getElementById("adminPanel").style.display = "none";
-      }
-    }
-
-    async function refreshAdminState() {
-      try {
-        const res = await fetch(API + "/alert.json", { cache: "no-store" });
-        const data = await res.json();
-        if (data.alert) {
-          document.getElementById("lockStatus").innerText = "⚠️ ALERT: Someone clicked 'Teacher Saw It'.";
-        }
-      } catch {}
-    }
-
-    // Event wiring
-    document.addEventListener("DOMContentLoaded", () => {
-      document.getElementById("enterBtn").addEventListener("click", checkSitePassword);
-      document.getElementById("encodeBtn").addEventListener("click", encode);
-      document.getElementById("decodeBtn").addEventListener("click", decode);
-
-      document.getElementById("alertBtn").addEventListener("click", async () => {
-        try {
-          await fetch(API + "/update-alert.php", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ alert: true })
-          });
-          document.getElementById("output").innerText = "⚠️ Alert sent. Jai will be notified.";
-          await refreshAdminState();
-        } catch {
-          document.getElementById("output").innerText = "Alert failed to send.";
-        }
-      });
-
-      document.getElementById("toggleLockBtn").addEventListener("click", async () => {
-        try {
-          await fetch(API + "/update-lock.php", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ toggle: true })
-          });
-          await checkLock();
-          document.getElementById("lockStatus").innerText = isLocked ? "🔒 Site is locked." : "🔓 Site is unlocked.";
-        } catch {
-          document.getElementById("lockStatus").innerText = "Lock toggle failed.";
-        }
-      });
-
-      document.getElementById("sorryBtn").addEventListener("click", () => {
-        sorryClicks++;
-        if (sorryClicks >= 10) {
-          document.getElementById("shutter").style.display = "none";
-          document.getElementById("encodeBtn").disabled = false;
-          document.getElementById("decodeBtn").disabled = false;
-          document.getElementById("output").innerText = "Decoder unlocked. Please enter a valid password.";
-          sorryClicks = 0;
-          document.getElementById("sorryBtn").innerText = "SORRY";
-        } else {
-          document.getElementById("sorryBtn").innerText = `SORRY (${sorryClicks})`;
-        }
-      });
+        await fetch(API + "/update-alert.php", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({alert:true})});
+        document.getElementById("output").innerText = "⚠️ Alert sent.";
+      } catch { document.getElementById("output").innerText = "Alert failed."; }
     });
-  </script>
+
+    document.getElementById("toggleLockBtn").addEventListener("click", async () => {
+      try {
+        await fetch(API + "/update-lock.php", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({toggle:true})});
+        await checkLock();
+      } catch { document.getElementById("lockStatus").innerText = "Lock toggle failed."; }
+    });
+
+    document.getElementById("sorryBtn").addEventListener("click", () => {
+      sorryClicks++;
+      if (sorryClicks >= 10) {
+        document.getElementById("shutter").style.display = "none";
+        document.getElementById("encodeBtn").disabled = false;
+        document.getElementById("decodeBtn").disabled = false;
+        document.getElementById("output").innerText = "Decoder unlocked. Please enter a valid password.";
+        sorryClicks = 0;
+        document.getElementById("sorryBtn").innerText = "SORRY";
+      } else {
+        document.getElementById("sorryBtn").innerText = `SORRY (${sorryClicks})`;
+      }
+    });
+
+    // initial quick load (if you want to load immediately)
+    // loadKey(); // <-- only call after site password accepted
+  });
+</script>
 </body>
 </html>
