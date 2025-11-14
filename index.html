@@ -6,48 +6,66 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="icon" href="data:,">
   <style>
-    body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;padding:20px;max-width:640px;margin:auto}
-    textarea,input,select{width:100%;margin-bottom:10px;font-size:16px;padding:6px}
-    button{margin-right:10px;padding:8px 16px;font-size:16px}
-    #output{white-space:pre-wrap;background:#f0f0f0;padding:10px;font-size:16px;min-height:64px}
-    #adminPanel{display:none;margin-top:20px;padding:10px;border:1px solid #ccc;background:#f9f9f9}
+    :root{--maxw:720px}
+    body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;padding:20px;max-width:var(--maxw);margin:24px auto;color:#111}
+    input,textarea,select{width:100%;margin-bottom:10px;font-size:15px;padding:8px;box-sizing:border-box}
+    button{padding:8px 14px;font-size:15px;margin-right:8px;cursor:pointer}
+    #output{white-space:pre-wrap;background:#f6f6f6;padding:12px;border-radius:6px;min-height:64px}
+    #adminPanel{display:none;margin-top:14px;padding:10px;border:1px solid #ddd;background:#fafafa;border-radius:6px}
     #shutter{position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;
-      background:repeating-linear-gradient(90deg,#222 0,#333 10px,#222 20px);color:#fff;font-size:24px;z-index:9999}
-    #sorryBtn{margin-top:20px;padding:10px 20px;font-size:20px;background:crimson;color:#fff;border:0;cursor:pointer}
+      background:linear-gradient(180deg,#111,#333);color:#fff;font-size:20px;z-index:9999;padding:20px;text-align:center}
+    #sorryBtn{margin-top:18px;padding:10px 18px;background:crimson;color:#fff;border:0;border-radius:6px}
+    label{font-weight:600;margin-bottom:6px;display:block}
+    .row{display:flex;gap:8px}
+    .row > *{flex:1}
+    .muted{color:#666;font-size:13px}
   </style>
 </head>
 <body>
+  <!-- Login screen: requires username + site password -->
   <div id="loginScreen">
-    <h2>Enter Access Password</h2>
-    <input type="password" id="sitePassword" placeholder="Site password" />
-    <button id="enterBtn">Enter</button>
-    <div id="loginError" style="color:red;margin-top:10px"></div>
+    <h2>Site Login</h2>
+    <label for="siteUser">Username</label>
+    <input id="siteUser" type="text" placeholder="Enter your username (e.g. jai)" autocomplete="username" />
+    <label for="sitePassword">Site password</label>
+    <input id="sitePassword" type="password" placeholder="Enter site password" autocomplete="current-password" />
+    <div class="row">
+      <button id="enterBtn">Enter</button>
+      <button id="quickGuestBtn">Guest (no decode)</button>
+    </div>
+    <div id="loginError" class="muted"></div>
+    <hr />
+    <div class="muted">Note: You need both a valid username and the site password to enter and decode. Admin user: jai.</div>
   </div>
 
+  <!-- Main app (hidden until login) -->
   <div id="mainApp" style="display:none">
-    <h1>Multi-Channel Encoder/Decoder</h1>
+    <h1>Multi-Channel Encoder / Decoder</h1>
 
-    <input type="password" id="password" placeholder="Enter user password" />
+    <label for="password">User password (same as username; confirm before Decode)</label>
+    <input id="password" type="text" placeholder="Re-type username here to Decode (e.g. jai)" />
+
+    <label for="channelSelect">Channel</label>
     <select id="channelSelect">
-      <option value="ch1">Channel 1</option>
-      <option value="ch2">Channel 2</option>
-      <option value="ch3">Channel 3</option>
+      <option value="">...</option>
     </select>
 
-    <textarea id="inputText" placeholder="Enter text or encoded numbers here"></textarea>
-    <div>
+    <label for="inputText">Input</label>
+    <textarea id="inputText" rows="5" placeholder="Plain text to encode or numbers to decode"></textarea>
+
+    <div style="margin-bottom:12px">
       <button id="encodeBtn">Encode</button>
       <button id="decodeBtn">Decode</button>
       <button id="alertBtn">Teacher Saw It</button>
     </div>
 
     <h3>Result:</h3>
-    <div id="output">Loading key...</div>
+    <div id="output">Key not loaded yet.</div>
 
     <div id="adminPanel">
-      <h3>Admin panel</h3>
+      <h4>Admin Panel (Jai)</h4>
       <button id="toggleLockBtn">Toggle Lock</button>
-      <div id="lockStatus" style="margin-top:8px"></div>
+      <div id="lockStatus" style="margin-top:8px" class="muted"></div>
     </div>
 
     <div id="shutter">
@@ -56,179 +74,221 @@
     </div>
   </div>
 
-<script>
-  // Config
-  const siteAccessPassword = "letmein";
-  const validPasswords = {
-    jai: "Jai",
-    declan: "Declan",
-    xander: "Xander",
-    xavier: "Xavier",
-    tanis: "Tanis"
-  };
-  const API = "https://code-9v3r.onrender.com"; // backend host (Render)
-  // State
-  let keybook = {};
-  let currentChannel = "ch1";
-  let reverseMap = {};
-  let isLocked = false;
-  let sorryClicks = 0;
+  <script>
+    // Configuration
+    const SITE_PASSWORD = "letmein";
+    const API_BASE = "https://code-9v3r.onrender.com"; // backend (Render)
+    // Allowed users (username keys are lowercase)
+    const USERS = { jai: "Jai", declan: "Declan", xander: "Xander", xavier: "Xavier", tanis: "Tanis" };
 
-  // Helpers
-  function hasValidMapFor(channel) {
-    return keybook && keybook[channel] && typeof keybook[channel] === "object" && Object.keys(keybook[channel]).length>0;
-  }
+    // State
+    let keybook = {};
+    let currentChannel = "";
+    let isLocked = false;
+    let sorryClicks = 0;
 
-  async function checkSitePassword() {
-    const entered = (document.getElementById("sitePassword").value || "").trim();
-    if (entered === siteAccessPassword) {
-      document.getElementById("loginScreen").style.display = "none";
-      document.getElementById("mainApp").style.display = "block";
-      await loadKey();
-    } else {
-      document.getElementById("loginError").innerText = "Incorrect password.";
-    }
-  }
+    // Helpers
+    const $ = id => document.getElementById(id);
+    function setOutput(text){ $("output").innerText = text; }
+    function hasMap(ch){ return keybook && keybook[ch] && typeof keybook[ch] === "object" && Object.keys(keybook[ch]).length>0; }
 
-  async function checkLock() {
-    try {
-      const res = await fetch(API + "/lock.json", {cache:"no-store"});
-      const data = await res.json();
-      isLocked = !!data.locked;
-      document.getElementById("shutter").style.display = isLocked ? "flex" : "none";
-      document.getElementById("encodeBtn").disabled = isLocked;
-      document.getElementById("decodeBtn").disabled = isLocked;
-      const ls = document.getElementById("lockStatus");
-      if (ls) ls.innerText = isLocked ? "🔒 Site is locked." : "🔓 Site is unlocked.";
-    } catch (e) {
-      document.getElementById("output").innerText = "Error checking lock state.";
-    }
-  }
-
-  async function loadKey() {
-    await checkLock();
-    if (isLocked) return;
-    try {
-      const res = await fetch("key.json", {cache:"no-store"});
-      keybook = await res.json();
-      // ensure channelSelect reflects available channels
-      const sel = document.getElementById("channelSelect");
-      const channels = Object.keys(keybook || {});
-      if (channels.length) {
-        // if current channel not found, switch to first
-        if (!channels.includes(currentChannel)) currentChannel = channels[0];
-        // replace select options if they differ (keeps UI in sync)
-        // only replace if set doesn't match
-        const opts = Array.from(sel.options).map(o=>o.value);
-        if (JSON.stringify(opts)!==JSON.stringify(channels.slice(0,opts.length))) {
-          sel.innerHTML = channels.map(c=>`<option value="${c}">${c}</option>`).join("");
-          sel.value = currentChannel;
+    // Load key.json and populate channel select
+    async function loadKey() {
+      try {
+        const res = await fetch("key.json", {cache:"no-store"});
+        if(!res.ok) throw new Error("key.json missing");
+        keybook = await res.json();
+        const channels = Object.keys(keybook || {});
+        const sel = $("channelSelect");
+        if(!channels.length){
+          sel.innerHTML = '<option value="">No channels</option>';
+          setOutput("Key loaded but contains no channels.");
+          return;
         }
+        sel.innerHTML = channels.map(c => `<option value="${c}">${c}</option>`).join("");
+        // pick first channel by default
+        currentChannel = sel.value = channels[0];
+        setOutput("Key loaded. Ready to encode or decode.");
+      } catch (err) {
+        console.error(err);
+        setOutput("Failed to load key.json. Ensure key.json is present and valid.");
       }
-      document.getElementById("output").innerText = hasValidMapFor(currentChannel) ? "Key loaded. Ready." : "Key loaded but channel map empty.";
-    } catch (e) {
-      document.getElementById("output").innerText = "Failed to load key.json.";
     }
-  }
 
-  function buildReverseMap(channel) {
-    reverseMap = {};
-    const forward = keybook[channel] || {};
-    for (const [k,v] of Object.entries(forward)) reverseMap[String(v)] = k;
-  }
-
-  function encode() {
-    // use selected channel for encode
-    currentChannel = document.getElementById("channelSelect").value;
-    if (!hasValidMapFor(currentChannel)) {
-      document.getElementById("output").innerText = "No mapping for selected channel. Load key or choose another channel.";
-      return;
-    }
-    const map = keybook[currentChannel];
-    const input = document.getElementById("inputText").value || "";
-    const result = [...input].map(ch => {
-      const K = ch.toUpperCase();
-      return map[K] !== undefined ? map[K] : "?";
-    }).join(" ");
-    document.getElementById("output").innerText = result.trim();
-  }
-
-  function decode() {
-    if (!hasValidMapFor(document.getElementById("channelSelect").value)) {
-      document.getElementById("output").innerText = "No mapping for selected channel. Load key or choose another channel.";
-      return;
-    }
-    const enteredPassword = (document.getElementById("password").value || "").toLowerCase().trim();
-    const selectedChannel = document.getElementById("channelSelect").value;
-    if (!(enteredPassword in validPasswords)) {
-      // invalid user — trigger lockdown
-      document.getElementById("inputText").value = "";
-      document.getElementById("password").value = "";
-      document.getElementById("encodeBtn").disabled = true;
-      document.getElementById("decodeBtn").disabled = true;
-      document.getElementById("shutter").style.display = "flex";
-      return;
-    }
-    // valid user, proceed
-    buildReverseMap(selectedChannel);
-    const input = (document.getElementById("inputText").value || "").trim();
-    const result = input.split(/\s+/).map(tok => reverseMap[tok] || "?").join("");
-    document.getElementById("output").innerText = `Welcome, ${validPasswords[enteredPassword]}!\n\n${result}`;
-
-    // admin behavior for jai
-    if (enteredPassword === "jai") {
-      document.getElementById("adminPanel").style.display = "block";
-      refreshAdminState();
-    } else {
-      document.getElementById("adminPanel").style.display = "none";
-    }
-  }
-
-  async function refreshAdminState() {
-    try {
-      const res = await fetch(API + "/alert.json", {cache:"no-store"});
-      const d = await res.json();
-      if (d.alert) document.getElementById("lockStatus").innerText = "⚠️ ALERT: Teacher Saw It clicked.";
-    } catch {}
-  }
-
-  // Buttons wiring
-  document.addEventListener("DOMContentLoaded", () => {
-    document.getElementById("enterBtn").addEventListener("click", checkSitePassword);
-    document.getElementById("encodeBtn").addEventListener("click", encode);
-    document.getElementById("decodeBtn").addEventListener("click", decode);
-
-    document.getElementById("alertBtn").addEventListener("click", async () => {
+    // Check lock.json and update UI
+    async function checkLock() {
       try {
-        await fetch(API + "/update-alert.php", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({alert:true})});
-        document.getElementById("output").innerText = "⚠️ Alert sent.";
-      } catch { document.getElementById("output").innerText = "Alert failed."; }
-    });
+        const res = await fetch(API_BASE + "/lock.json", {cache:"no-store"});
+        if(!res.ok) throw new Error("lock.json fetch failed");
+        const data = await res.json();
+        isLocked = !!data.locked;
+      } catch (e) {
+        // network / fetch failure: treat as unlocked but show message
+        console.warn(e);
+        isLocked = false;
+      }
+      applyLockState();
+    }
 
-    document.getElementById("toggleLockBtn").addEventListener("click", async () => {
-      try {
-        await fetch(API + "/update-lock.php", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({toggle:true})});
-        await checkLock();
-      } catch { document.getElementById("lockStatus").innerText = "Lock toggle failed."; }
-    });
-
-    document.getElementById("sorryBtn").addEventListener("click", () => {
-      sorryClicks++;
-      if (sorryClicks >= 10) {
-        document.getElementById("shutter").style.display = "none";
-        document.getElementById("encodeBtn").disabled = false;
-        document.getElementById("decodeBtn").disabled = false;
-        document.getElementById("output").innerText = "Decoder unlocked. Please enter a valid password.";
-        sorryClicks = 0;
-        document.getElementById("sorryBtn").innerText = "SORRY";
+    function applyLockState(){
+      if(isLocked){
+        $("shutter").style.display = "flex";
+        $("encodeBtn").disabled = true;
+        $("decodeBtn").disabled = true;
+        $("lockStatus").innerText = "🔒 Site is locked.";
       } else {
-        document.getElementById("sorryBtn").innerText = `SORRY (${sorryClicks})`;
+        $("shutter").style.display = "none";
+        $("encodeBtn").disabled = false;
+        $("decodeBtn").disabled = false;
+        $("lockStatus").innerText = "🔓 Site is unlocked.";
       }
-    });
+    }
 
-    // initial quick load (if you want to load immediately)
-    // loadKey(); // <-- only call after site password accepted
-  });
-</script>
+    // Encode: use selected channel mapping
+    function encode(){
+      currentChannel = $("channelSelect").value;
+      if(!currentChannel || !hasMap(currentChannel)){
+        setOutput("No mapping for selected channel. Load key or choose another channel.");
+        return;
+      }
+      const map = keybook[currentChannel];
+      const input = $("inputText").value || "";
+      const encoded = [...input].map(ch => {
+        const k = ch.toUpperCase();
+        return map[k] !== undefined ? map[k] : "?";
+      }).join(" ");
+      setOutput(encoded || "[empty]");
+    }
+
+    // Decode: requires correct user password (username) to avoid lockdown
+    function decode(){
+      currentChannel = $("channelSelect").value;
+      if(!currentChannel || !hasMap(currentChannel)){
+        setOutput("No mapping for selected channel. Load key or choose another channel.");
+        return;
+      }
+      const entered = (($("password").value || "").toLowerCase().trim());
+      // check user exists and matches login username (we require both)
+      const sessionUser = sessionStorage.getItem("siteUser") || "";
+      if(!sessionUser || sessionUser.toLowerCase() !== entered){
+        // invalid user -> trigger lockdown
+        $("inputText").value = "";
+        $("password").value = "";
+        $("encodeBtn").disabled = true;
+        $("decodeBtn").disabled = true;
+        $("shutter").style.display = "flex";
+        setOutput("Invalid user. Site locked.");
+        return;
+      }
+      // valid user: build reverse map and decode tokens
+      const forward = keybook[currentChannel];
+      const reverse = {};
+      for(const [k,v] of Object.entries(forward)) reverse[String(v)] = k;
+      const tokens = ($("inputText").value || "").trim().split(/\s+/).filter(Boolean);
+      const decoded = tokens.map(t => reverse[t] || "?").join("");
+      const displayName = USERS[entered] || entered;
+      setOutput(`Welcome, ${displayName}!\n\n${decoded || "[empty]"}`);
+      // show admin panel if jai
+      if(entered === "jai") {
+        $("adminPanel").style.display = "block";
+        refreshAdminState();
+      } else {
+        $("adminPanel").style.display = "none";
+      }
+    }
+
+    // Admin helpers
+    async function refreshAdminState(){
+      try {
+        const res = await fetch(API_BASE + "/alert.json", {cache:"no-store"});
+        if(res.ok){
+          const d = await res.json();
+          if(d.alert) $("lockStatus").innerText = "⚠️ ALERT: Teacher Saw It clicked.";
+        }
+      } catch {}
+    }
+
+    // Event wiring after DOM ready
+    document.addEventListener("DOMContentLoaded", () => {
+      // Buttons
+      $("enterBtn").addEventListener("click", async () => {
+        const user = (($("siteUser").value || "").toLowerCase().trim());
+        const pwd  = (($("sitePassword").value || "").trim());
+        if(!user) { $("loginError").innerText = "Enter a username."; return; }
+        if(pwd !== SITE_PASSWORD) { $("loginError").innerText = "Incorrect site password."; return; }
+        // valid site login: store session username and show app
+        sessionStorage.setItem("siteUser", user);
+        $("loginError").innerText = "";
+        $("loginScreen").style.display = "none";
+        $("mainApp").style.display = "block";
+        await checkLock();
+        if(isLocked) { setOutput("Site is under lockdown."); return; }
+        await loadKey();
+      });
+
+      // Quick guest: show UI but decoding will require matching username later
+      $("quickGuestBtn").addEventListener("click", () => {
+        sessionStorage.removeItem("siteUser");
+        $("loginError").innerText = "Guest: decoding will lock if username not provided at decode.";
+        $("loginScreen").style.display = "none";
+        $("mainApp").style.display = "block";
+        checkLock().then(loadKey);
+      });
+
+      $("encodeBtn").addEventListener("click", encode);
+      $("decodeBtn").addEventListener("click", decode);
+
+      $("alertBtn").addEventListener("click", async () => {
+        try {
+          await fetch(API_BASE + "/update-alert.php", {
+            method: "POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({ alert: true })
+          });
+          setOutput("⚠️ Alert sent. Admin will be notified.");
+        } catch {
+          setOutput("Alert failed to send.");
+        }
+      });
+
+      $("toggleLockBtn").addEventListener("click", async () => {
+        try {
+          await fetch(API_BASE + "/update-lock.php", {
+            method: "POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({ toggle: true })
+          });
+          // refresh lock state after toggling
+          await checkLock();
+          setOutput(isLocked ? "Site locked by admin." : "Site unlocked by admin.");
+        } catch {
+          $("lockStatus").innerText = "Lock toggle failed.";
+        }
+      });
+
+      $("sorryBtn").addEventListener("click", () => {
+        sorryClicks++;
+        if(sorryClicks >= 8){
+          $("shutter").style.display = "none";
+          $("encodeBtn").disabled = false;
+          $("decodeBtn").disabled = false;
+          setOutput("Decoder unlocked. Please re-enter username to decode.");
+          sorryClicks = 0;
+        } else {
+          $("sorryBtn").innerText = `SORRY (${sorryClicks})`;
+        }
+      });
+
+      // channel change quick feedback
+      $("channelSelect").addEventListener("change", () => {
+        const ch = $("channelSelect").value;
+        if(!ch || !hasMap(ch)) setOutput("No mapping for selected channel. Load key or choose another channel.");
+        else setOutput("Channel selected: " + ch);
+      });
+
+      // If you want to attempt immediate load (not recommended before login), uncomment:
+      // loadKey();
+    });
+  </script>
 </body>
 </html>
