@@ -27,48 +27,36 @@
   </style>
 </head>
 <body>
-  <!-- LOGIN -->
   <div id="loginScreen">
     <h2>Site Login</h2>
-
     <label for="siteUser">Username</label>
     <input id="siteUser" type="text" placeholder="Enter username (e.g. jai)" autocomplete="username" />
-
     <label for="sitePassword">Site password</label>
     <input id="sitePassword" type="password" placeholder="Enter site password" autocomplete="current-password" />
-
     <div style="margin-top:12px">
       <button id="enterBtn" class="primary">Enter</button>
       <button id="guestBtn">Enter as Guest (no decode)</button>
     </div>
-
     <div id="loginError" class="muted" style="margin-top:10px"></div>
     <hr style="margin:18px 0" />
     <div class="muted">You must provide a site username AND the site password to decode. Admin: <strong>jai</strong>. Site password: <strong>letmein</strong>.</div>
   </div>
 
-  <!-- APP -->
   <div id="mainApp" style="display:none">
     <h1>Multi-Channel Encoder / Decoder</h1>
-
     <label for="password">Re-type username to decode</label>
     <input id="password" type="text" placeholder="Re-type your username here before clicking Decode" autocomplete="off" />
-
     <label>Channels</label>
     <div id="channelButtons" aria-label="Channels"></div>
-
     <label for="inputText">Input (text to encode or codes to decode)</label>
     <textarea id="inputText" placeholder="Type plain text to encode or numbers (space separated) to decode"></textarea>
-
     <div class="controls" style="margin-bottom:12px">
       <button id="encodeBtn">Encode</button>
       <button id="decodeBtn" class="primary">Decode</button>
       <button id="alertBtn" style="background:#ffea00">Teacher Saw It</button>
     </div>
-
     <h3>Result:</h3>
     <div id="output">Key not loaded yet.</div>
-
     <div id="adminPanel">
       <h3>Admin Panel (jai)</h3>
       <div style="display:flex;gap:8px;align-items:center">
@@ -76,7 +64,6 @@
         <div id="lockStatus" class="muted">Unknown</div>
       </div>
     </div>
-
     <div id="shutter">
       <div style="font-size:26px">🔒 Decoder Locked — Unauthorized access detected</div>
       <div class="muted" style="margin-top:10px">Contact admin or press SORRY repeatedly to unlock temporarily</div>
@@ -96,7 +83,7 @@
     let isLocked = false;
     let sorryClicks = 0;
 
-    // Make polling handle global and accessible from console (use var to attach to window)
+    // global polling handle
     var lockPollInterval = null;
 
     // HELPERS
@@ -180,7 +167,7 @@
       }
     }
 
-    // START/STOP LOCK POLLING (applies lockdown to all clients)
+    // START/STOP LOCK POLLING
     function startLockPolling(intervalMs = 2500) {
       if (window.lockPollInterval) return;
       window.lockPollInterval = setInterval(() => {
@@ -203,7 +190,7 @@
       window.lockPollInterval = null;
     }
 
-    // ENCODE (safe: preserve code strings exactly)
+    // ENCODE
     function encode(){
       if(!currentChannel || !hasMap(currentChannel)){ setOut("No mapping for selected channel. Load key or choose another channel."); return; }
       const input = ($('inputText').value || '');
@@ -212,7 +199,7 @@
       setOut(out || "[empty]");
     }
 
-    // DECODE (safe: multi-digit tokens, requires re-typed username match to session username)
+    // DECODE
     function decode(){
       if(!currentChannel || !hasMap(currentChannel)){ setOut("No mapping for selected channel. Load key or choose another channel."); return; }
       const entered = (($('password').value || '').toLowerCase().trim());
@@ -246,15 +233,14 @@
       } catch (e) { /* ignore */ }
     }
 
-    // OPTIONAL: guard any cookie API usage (example guard shown)
-    // If your code or console snippets call chrome.cookies (extension API), wrap calls like this:
+    // Safe cookie-use wrapper for console/extension snippets
     function safeUseChromeCookies(fn) {
       if (typeof chrome !== 'undefined' && chrome && chrome.cookies) {
         try { fn(chrome.cookies); } catch (e) { console.warn('chrome.cookies call failed', e); }
       } else if (typeof browser !== 'undefined' && browser && browser.cookies) {
         try { fn(browser.cookies); } catch (e) { console.warn('browser.cookies call failed', e); }
       } else {
-        // page context: no cookie extension API available — ignore or fallback
+        // no extension cookie API in page context
       }
     }
 
@@ -271,7 +257,6 @@
         $('mainApp').style.display = 'block';
         await checkLock();
         if (isLocked) { setOut("Site is under lockdown."); return; }
-        // start polling so all clients pick up server lock changes
         startLockPolling();
         await loadKey();
       });
