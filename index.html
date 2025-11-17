@@ -5,21 +5,23 @@
   <title>Multi‑Channel Encoder / Decoder</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    :root{--maxw:820px;--accent:#0366d6}
+    :root{--maxw:860px;--accent:#0366d6}
     body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;margin:24px auto;padding:20px;max-width:var(--maxw);color:#111}
     label{display:block;margin:8px 0 6px;font-weight:600}
     input,textarea,button{font:inherit}
     input,textarea{width:100%;padding:8px;border:1px solid #dcdcdc;border-radius:6px;box-sizing:border-box}
-    textarea{min-height:110px;resize:vertical}
+    textarea{min-height:140px;resize:vertical}
     button{padding:8px 12px;border-radius:6px;border:1px solid #bbb;background:#fff;cursor:pointer}
     button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
     .muted{color:#666;font-size:13px}
-    #output{white-space:pre-wrap;background:#fafafa;padding:12px;border:1px solid #eee;border-radius:6px;min-height:64px}
+    #output{white-space:pre-wrap;background:#fafafa;padding:12px;border:1px solid #eee;border-radius:6px;min-height:80px}
     #channelButtons{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 12px}
     .channel-btn{padding:8px 12px;border:1px solid #ccc;border-radius:8px;background:#fff;cursor:pointer;font-weight:600}
     .channel-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
     .controls{display:flex;gap:8px;flex-wrap:wrap}
-    @media (max-width:520px){ .controls{flex-direction:column} }
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    @media (max-width:520px){ .controls,.row{flex-direction:column;align-items:stretch} }
+    code.bad{color:#b00020;font-weight:600}
   </style>
 </head>
 <body>
@@ -30,30 +32,44 @@
     <input id="siteUser" type="text" placeholder="Enter username (e.g. jai)" autocomplete="username" />
     <label for="sitePassword">Site password</label>
     <input id="sitePassword" type="password" placeholder="Enter site password" autocomplete="current-password" />
-    <div style="margin-top:12px">
+    <div class="row" style="margin-top:12px">
       <button id="enterBtn" class="primary">Enter</button>
       <button id="guestBtn">Enter as Guest</button>
     </div>
     <div id="loginError" class="muted" style="margin-top:10px"></div>
     <hr style="margin:18px 0" />
-    <div class="muted">Site password is <strong>letmein</strong>. Admin username is <strong>jai</strong>.</div>
+    <div class="muted">Site password is <strong>letmein</strong>.</div>
   </div>
 
   <!-- APP -->
   <div id="mainApp" style="display:none">
     <h1>Multi‑Channel Encoder / Decoder</h1>
-    <label for="password">Re‑type username to decode</label>
-    <input id="password" type="text" placeholder="Re‑type your username here before clicking Decode" autocomplete="off" />
+
+    <div class="row">
+      <label for="password">Re‑type username to decode</label>
+      <input id="password" type="text" placeholder="Re‑type your username here before clicking Decode" autocomplete="off" />
+    </div>
+
     <label>Channels</label>
     <div id="channelButtons" aria-label="Channels"></div>
+
+    <div class="row">
+      <label for="delimiter">Code delimiter</label>
+      <input id="delimiter" type="text" value="|" style="width:100px" />
+      <span class="muted">Use a delimiter that won't appear in your codes (default: |)</span>
+    </div>
+
     <label for="inputText">Input (text to encode or codes to decode)</label>
-    <textarea id="inputText" placeholder="Type plain text to encode or numbers (space separated) to decode"></textarea>
+    <textarea id="inputText" placeholder="Type any text to encode, or paste delimited codes (e.g. 1A|2B|SP|!!|..."></textarea>
+
     <div class="controls" style="margin-bottom:12px">
       <button id="encodeBtn">Encode</button>
       <button id="decodeBtn" class="primary">Decode</button>
     </div>
+
     <h3>Result:</h3>
     <div id="output">Key not loaded yet.</div>
+    <div id="coverage" class="muted" style="margin-top:6px"></div>
   </div>
 
   <script>
@@ -67,9 +83,30 @@
 
     // HELPERS
     const $ = id => document.getElementById(id);
-    const setOut = txt => { if($('output')) $('output').innerText = txt; };
-    function hasMap(ch) { return keybook && keybook[ch] && typeof keybook[ch] === "object" && Object.keys(keybook[ch]).length > 0; }
+    const setOut = txt => { if ($('output')) $('output').innerText = txt; };
+    const delim = () => ($('delimiter').value || '|');
+
     function sessionUser() { return sessionStorage.getItem("siteUser") || ""; }
+    function hasMap(ch) { return keybook && keybook[ch] && typeof keybook[ch] === "object" && Object.keys(keybook[ch]).length > 0; }
+
+    // Show coverage & missing chars for current input
+    function showCoveragePreview() {
+      if (!currentChannel || !hasMap(currentChannel)) { $('coverage').innerText = ''; return; }
+      const map = keybook[currentChannel];
+      const input = $('inputText').value || '';
+      const missing = new Set();
+      for (const ch of input) {
+        const key = ch; // case‑sensitive mapping
+        if (!(key in map)) missing.add(key);
+      }
+      if (missing.size) {
+        $('coverage').innerHTML = `Missing ${
+          missing.size
+        } char(s) in ${currentChannel}: ` + [...missing].slice(0, 20).map(c => `<code class="bad">${c === ' ' ? '␠' : c}</code>`).join(' ');
+      } else {
+        $('coverage').innerText = `All characters in the input are supported by ${currentChannel}.`;
+      }
+    }
 
     // RENDER CHANNEL BUTTONS
     function renderChannelButtons(){
@@ -90,6 +127,7 @@
           btn.classList.add('active');
           currentChannel = ch;
           setOut("Channel selected: " + currentChannel);
+          showCoveragePreview();
         });
         container.appendChild(btn);
       });
@@ -103,35 +141,42 @@
         keybook = await r.json();
         renderChannelButtons();
         setOut("Key loaded. Ready to encode or decode.");
+        showCoveragePreview();
       } catch (err) {
         console.error(err);
         setOut("Failed to load key.json.");
       }
     }
 
-    // ENCODE
+    // ENCODE (case‑sensitive; space is ' ' key, delimiter defaults to '|')
     function encode(){
       if(!currentChannel || !hasMap(currentChannel)){ setOut("No mapping for selected channel."); return; }
-      const input = ($('inputText').value || '');
       const map = keybook[currentChannel];
-      const out = [...input].map(ch => { const k = ch.toUpperCase(); return map[k] !== undefined ? String(map[k]) : '?'; }).join(' ');
-      setOut(out || "[empty]");
+      const input = $('inputText').value || '';
+      const d = delim();
+      const outCodes = [];
+      for (const ch of input) {
+        if (ch in map) outCodes.push(String(map[ch]));
+        else outCodes.push('?'); // unmapped char
+      }
+      setOut(outCodes.join(d) || "[empty]");
     }
 
-    // DECODE
+    // DECODE (split by delimiter; resolves exact codes back to characters)
     function decode(){
       if(!currentChannel || !hasMap(currentChannel)){ setOut("No mapping for selected channel."); return; }
       const entered = (($('password').value || '').toLowerCase().trim());
       const logged = sessionUser().toLowerCase();
-      if(!logged || logged !== entered){
-        setOut("Invalid user. Cannot decode.");
-        return;
-      }
+      if(!logged || logged !== entered){ setOut("Invalid user. Cannot decode."); return; }
+
+      const d = delim();
       const forward = keybook[currentChannel];
       const reverse = {};
-      for(const [k,v] of Object.entries(forward)) reverse[String(v)] = k;
-      const tokens = ($('inputText').value || '').trim().split(/\s+/).filter(Boolean);
-      const decoded = tokens.map(t => reverse[t] || '?').join('');
+      for (const [k,v] of Object.entries(forward)) reverse[String(v)] = k;
+
+      const raw = ($('inputText').value || '').trim();
+      const tokens = raw.length ? raw.split(d) : [];
+      const decoded = tokens.map(t => (t in reverse ? reverse[t] : '?')).join('');
       const displayName = USER_LIST[logged] || logged;
       setOut(`Welcome, ${displayName}!\n\n${decoded || "[empty]"}`);
     }
@@ -160,6 +205,8 @@
 
       $('encodeBtn').addEventListener('click', encode);
       $('decodeBtn').addEventListener('click', decode);
+      $('inputText').addEventListener('input', showCoveragePreview);
+      $('delimiter').addEventListener('input', () => setTimeout(showCoveragePreview, 0));
     });
   </script>
 </body>
