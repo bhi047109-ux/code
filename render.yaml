@@ -1,8 +1,0 @@
-services:
-  - type: web
-    name: decoder-backend
-    env: php
-    plan: free
-    buildCommand: ""
-    startCommand: ""
-    rootDir: .
