@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Secure Decoder — Hardened</title>
+  <title>Multi‑Channel Encoder / Decoder</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     :root{--maxw:820px;--accent:#0366d6}
@@ -15,10 +15,6 @@
     button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
     .muted{color:#666;font-size:13px}
     #output{white-space:pre-wrap;background:#fafafa;padding:12px;border:1px solid #eee;border-radius:6px;min-height:64px}
-    #adminPanel{display:none;margin-top:14px;padding:12px;border:1px solid #eee;border-radius:6px;background:#fff}
-    #shutter{position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;
-      background:linear-gradient(180deg,#111,#333);color:#fff;font-size:20px;z-index:9999;padding:20px;text-align:center}
-    #sorryBtn{margin-top:18px;padding:10px 18px;background:crimson;color:#fff;border:0;border-radius:6px;cursor:pointer}
     #channelButtons{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 12px}
     .channel-btn{padding:8px 12px;border:1px solid #ccc;border-radius:8px;background:#fff;cursor:pointer;font-weight:600}
     .channel-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
@@ -27,6 +23,7 @@
   </style>
 </head>
 <body>
+  <!-- LOGIN -->
   <div id="loginScreen">
     <h2>Site Login</h2>
     <label for="siteUser">Username</label>
@@ -35,17 +32,18 @@
     <input id="sitePassword" type="password" placeholder="Enter site password" autocomplete="current-password" />
     <div style="margin-top:12px">
       <button id="enterBtn" class="primary">Enter</button>
-      <button id="guestBtn">Enter as Guest (no decode)</button>
+      <button id="guestBtn">Enter as Guest</button>
     </div>
     <div id="loginError" class="muted" style="margin-top:10px"></div>
     <hr style="margin:18px 0" />
-    <div class="muted">You must provide a site username AND the site password to decode. Admin: <strong>jai</strong>. Site password: <strong>letmein</strong>.</div>
+    <div class="muted">Site password is <strong>letmein</strong>. Admin username is <strong>jai</strong>.</div>
   </div>
 
+  <!-- APP -->
   <div id="mainApp" style="display:none">
-    <h1>Multi-Channel Encoder / Decoder</h1>
-    <label for="password">Re-type username to decode</label>
-    <input id="password" type="text" placeholder="Re-type your username here before clicking Decode" autocomplete="off" />
+    <h1>Multi‑Channel Encoder / Decoder</h1>
+    <label for="password">Re‑type username to decode</label>
+    <input id="password" type="text" placeholder="Re‑type your username here before clicking Decode" autocomplete="off" />
     <label>Channels</label>
     <div id="channelButtons" aria-label="Channels"></div>
     <label for="inputText">Input (text to encode or codes to decode)</label>
@@ -53,38 +51,19 @@
     <div class="controls" style="margin-bottom:12px">
       <button id="encodeBtn">Encode</button>
       <button id="decodeBtn" class="primary">Decode</button>
-      <button id="alertBtn" style="background:#ffea00">Teacher Saw It</button>
     </div>
     <h3>Result:</h3>
     <div id="output">Key not loaded yet.</div>
-    <div id="adminPanel">
-      <h3>Admin Panel (jai)</h3>
-      <div style="display:flex;gap:8px;align-items:center">
-        <button id="toggleLockBtn">Toggle Lock</button>
-        <div id="lockStatus" class="muted">Unknown</div>
-      </div>
-    </div>
-    <div id="shutter">
-      <div style="font-size:26px">🔒 Decoder Locked — Unauthorized access detected</div>
-      <div class="muted" style="margin-top:10px">Contact admin or press SORRY repeatedly to unlock temporarily</div>
-      <button id="sorryBtn">SORRY</button>
-    </div>
   </div>
 
   <script>
     // CONFIG
     const SITE_PASSWORD = "letmein";
-    const API_BASE = "https://code-9v3r.onrender.com";
     const USER_LIST = { jai: "Jai", declan: "Declan", xander: "Xander", xavier: "Xavier", tanis: "Tanis" };
 
     // STATE
     let keybook = {};
     let currentChannel = "";
-    let isLocked = false;
-    let sorryClicks = 0;
-
-    // global polling handle
-    var lockPollInterval = null;
 
     // HELPERS
     const $ = id => document.getElementById(id);
@@ -110,8 +89,7 @@
           Array.from(container.children).forEach(c => c.classList && c.classList.remove('active'));
           btn.classList.add('active');
           currentChannel = ch;
-          if(!hasMap(currentChannel)) setOut("No mapping for selected channel. Load key or choose another channel.");
-          else setOut("Channel selected: " + currentChannel);
+          setOut("Channel selected: " + currentChannel);
         });
         container.appendChild(btn);
       });
@@ -124,93 +102,29 @@
         if(!r.ok) throw new Error('key.json fetch failed: ' + r.status);
         keybook = await r.json();
         renderChannelButtons();
-        if(!hasMap(currentChannel)){
-          const valid = Object.keys(keybook || {}).find(c => hasMap(c));
-          if(valid) {
-            currentChannel = valid;
-            const b = document.querySelector(`#channelButtons button[data-channel="${CSS.escape(currentChannel)}"]`);
-            if(b){ Array.from($('channelButtons').children).forEach(c=>c.classList && c.classList.remove('active')); b.classList.add('active'); }
-          }
-        }
-        setOut(hasMap(currentChannel) ? "Key loaded. Ready to encode or decode." : "Key loaded, but channel map empty.");
+        setOut("Key loaded. Ready to encode or decode.");
       } catch (err) {
         console.error(err);
-        setOut("Failed to load key.json. Ensure key.json is present and valid in the same folder.");
+        setOut("Failed to load key.json.");
       }
-    }
-
-    // CHECK LOCK
-    async function checkLock(){
-      try {
-        const res = await fetch(API_BASE + '/lock.json', { cache: 'no-store' });
-        if(!res.ok) throw new Error('lock.json fetch failed');
-        const data = await res.json();
-        isLocked = !!data.locked;
-      } catch (e) {
-        console.warn('checkLock failed:', e);
-        isLocked = false;
-      }
-      applyLockUI();
-    }
-
-    function applyLockUI(){
-      if(isLocked){
-        $('shutter').style.display = 'flex';
-        $('encodeBtn').disabled = true;
-        $('decodeBtn').disabled = true;
-        $('lockStatus').innerText = "🔒 Site is locked.";
-      } else {
-        $('shutter').style.display = 'none';
-        $('encodeBtn').disabled = false;
-        $('decodeBtn').disabled = false;
-        $('lockStatus').innerText = "🔓 Site is unlocked.";
-      }
-    }
-
-    // START/STOP LOCK POLLING
-    function startLockPolling(intervalMs = 2500) {
-      if (window.lockPollInterval) return;
-      window.lockPollInterval = setInterval(() => {
-        fetch(API_BASE + '/lock.json', { cache: 'no-store' })
-          .then(r => { if (!r.ok) throw r; return r.json(); })
-          .then(data => {
-            const newLocked = !!data.locked;
-            if (newLocked !== isLocked) {
-              isLocked = newLocked;
-              applyLockUI();
-            }
-          })
-          .catch(() => { /* ignore transient errors */ });
-      }, intervalMs);
-    }
-
-    function stopLockPolling() {
-      if (!window.lockPollInterval) return;
-      clearInterval(window.lockPollInterval);
-      window.lockPollInterval = null;
     }
 
     // ENCODE
     function encode(){
-      if(!currentChannel || !hasMap(currentChannel)){ setOut("No mapping for selected channel. Load key or choose another channel."); return; }
+      if(!currentChannel || !hasMap(currentChannel)){ setOut("No mapping for selected channel."); return; }
       const input = ($('inputText').value || '');
       const map = keybook[currentChannel];
-      const out = [...input].map(ch => { const k = ch.toUpperCase(); return map[k] !== undefined && map[k] !== null ? String(map[k]) : '?'; }).join(' ');
+      const out = [...input].map(ch => { const k = ch.toUpperCase(); return map[k] !== undefined ? String(map[k]) : '?'; }).join(' ');
       setOut(out || "[empty]");
     }
 
     // DECODE
     function decode(){
-      if(!currentChannel || !hasMap(currentChannel)){ setOut("No mapping for selected channel. Load key or choose another channel."); return; }
+      if(!currentChannel || !hasMap(currentChannel)){ setOut("No mapping for selected channel."); return; }
       const entered = (($('password').value || '').toLowerCase().trim());
       const logged = sessionUser().toLowerCase();
       if(!logged || logged !== entered){
-        $('inputText').value = '';
-        $('password').value = '';
-        $('encodeBtn').disabled = true;
-        $('decodeBtn').disabled = true;
-        $('shutter').style.display = 'flex';
-        setOut("Invalid user. Site locked.");
+        setOut("Invalid user. Cannot decode.");
         return;
       }
       const forward = keybook[currentChannel];
@@ -220,28 +134,6 @@
       const decoded = tokens.map(t => reverse[t] || '?').join('');
       const displayName = USER_LIST[logged] || logged;
       setOut(`Welcome, ${displayName}!\n\n${decoded || "[empty]"}`);
-      if(logged === 'jai'){ $('adminPanel').style.display = 'block'; refreshAdminState(); } else { $('adminPanel').style.display = 'none'; }
-    }
-
-    // ADMIN helpers
-    async function refreshAdminState(){
-      try {
-        const res = await fetch(API_BASE + '/alert.json', { cache: 'no-store' });
-        if(!res.ok) throw new Error('alert.json fetch failed');
-        const d = await res.json();
-        if(d.alert) $('lockStatus').innerText = "⚠️ ALERT: Teacher Saw It clicked.";
-      } catch (e) { /* ignore */ }
-    }
-
-    // Safe cookie-use wrapper for console/extension snippets
-    function safeUseChromeCookies(fn) {
-      if (typeof chrome !== 'undefined' && chrome && chrome.cookies) {
-        try { fn(chrome.cookies); } catch (e) { console.warn('chrome.cookies call failed', e); }
-      } else if (typeof browser !== 'undefined' && browser && browser.cookies) {
-        try { fn(browser.cookies); } catch (e) { console.warn('browser.cookies call failed', e); }
-      } else {
-        // no extension cookie API in page context
-      }
     }
 
     // EVENTS
@@ -255,50 +147,19 @@
         $('loginError').innerText = "";
         $('loginScreen').style.display = 'none';
         $('mainApp').style.display = 'block';
-        await checkLock();
-        if (isLocked) { setOut("Site is under lockdown."); return; }
-        startLockPolling();
         await loadKey();
       });
 
       $('guestBtn').addEventListener('click', () => {
         sessionStorage.removeItem('siteUser');
-        $('loginError').innerText = "Guest: decoding will lock unless username re-typed to match later.";
+        $('loginError').innerText = "Guest mode: decoding requires username match.";
         $('loginScreen').style.display = 'none';
         $('mainApp').style.display = 'block';
-        checkLock().then(() => { startLockPolling(); loadKey(); });
+        loadKey();
       });
 
       $('encodeBtn').addEventListener('click', encode);
       $('decodeBtn').addEventListener('click', decode);
-
-      $('alertBtn').addEventListener('click', async () => {
-        try {
-          await fetch(API_BASE + '/update-alert.php', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ alert: true }) });
-          setOut("⚠️ Alert sent. Admin will be notified.");
-        } catch (e) { setOut("Alert failed to send."); }
-      });
-
-      $('toggleLockBtn').addEventListener('click', async () => {
-        try {
-          await fetch(API_BASE + '/update-lock.php', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ toggle: true }) });
-          await checkLock();
-          setOut(isLocked ? "Site locked by admin." : "Site unlocked by admin.");
-        } catch (e) { $('lockStatus').innerText = "Lock toggle failed."; }
-      });
-
-      $('sorryBtn').addEventListener('click', () => {
-        sorryClicks++;
-        if(sorryClicks >= 8){
-          $('shutter').style.display = 'none';
-          $('encodeBtn').disabled = false;
-          $('decodeBtn').disabled = false;
-          setOut("Decoder unlocked temporarily. Re-enter username to decode.");
-          sorryClicks = 0;
-        } else {
-          $('sorryBtn').innerText = `SORRY (${sorryClicks})`;
-        }
-      });
     });
   </script>
 </body>
