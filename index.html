@@ -1,213 +1,45 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>Multi‑Channel Encoder / Decoder</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="UTF-8">
+  <title>Key System</title>
+  <!-- Auto-refresh every 3 minutes -->
+  <meta http-equiv="refresh" content="180">
   <style>
-    :root{--maxw:860px;--accent:#0366d6}
-    body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;margin:24px auto;padding:20px;max-width:var(--maxw);color:#111}
-    label{display:block;margin:8px 0 6px;font-weight:600}
-    input,textarea,button{font:inherit}
-    input,textarea{width:100%;padding:8px;border:1px solid #dcdcdc;border-radius:6px;box-sizing:border-box}
-    textarea{min-height:140px;resize:vertical}
-    button{padding:8px 12px;border-radius:6px;border:1px solid #bbb;background:#fff;cursor:pointer}
-    button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
-    .muted{color:#666;font-size:13px}
-    #output{white-space:pre-wrap;background:#fafafa;padding:12px;border:1px solid #eee;border-radius:6px;min-height:80px}
-    #channelButtons{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 12px}
-    .channel-btn{padding:8px 12px;border:1px solid #ccc;border-radius:8px;background:#fff;cursor:pointer;font-weight:600}
-    .channel-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
-    .controls{display:flex;gap:8px;flex-wrap:wrap}
-    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    @media (max-width:520px){ .controls,.row{flex-direction:column;align-items:stretch} }
-    code.bad{color:#b00020;font-weight:600}
+    body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+    h1 { color: #333; }
+    pre { text-align: left; margin: 20px auto; width: 80%; background: #f4f4f4; padding: 10px; border-radius: 6px; }
   </style>
 </head>
 <body>
-  <!-- LOGIN -->
-  <div id="loginScreen">
-    <h2>Site Login</h2>
-    <label for="siteUser">Username</label>
-    <input id="siteUser" type="text" placeholder="Enter username (e.g. jai)" autocomplete="username" />
-    <label for="sitePassword">Site password</label>
-    <input id="sitePassword" type="password" placeholder="Enter site password" autocomplete="current-password" />
-    <div class="row" style="margin-top:12px">
-      <button id="enterBtn" class="primary">Enter</button>
-      <button id="guestBtn">Enter as Guest</button>
-    </div>
-    <div id="loginError" class="muted" style="margin-top:10px"></div>
-    <hr style="margin:18px 0" />
-    <div class="muted">Site password is <strong>letmein</strong>.</div>
-  </div>
-
-  <!-- APP -->
-  <div id="mainApp" style="display:none">
-    <h1>Multi‑Channel Encoder / Decoder</h1>
-
-    <div class="row">
-      <label for="password">Re‑type username to decode</label>
-      <input id="password" type="text" placeholder="Re‑type your username here before clicking Decode" autocomplete="off" />
-    </div>
-
-    <label>Channels</label>
-    <div id="channelButtons" aria-label="Channels"></div>
-
-    <div class="row">
-      <label for="delimiter">Code delimiter</label>
-      <input id="delimiter" type="text" value="|" style="width:100px" />
-      <span class="muted">Use a delimiter that won't appear in your codes (default: |)</span>
-    </div>
-
-    <label for="inputText">Input (text to encode or codes to decode)</label>
-    <textarea id="inputText" placeholder="Type any text to encode, or paste delimited codes (e.g. 1A|2B|SP|!!|..."></textarea>
-
-    <div class="controls" style="margin-bottom:12px">
-      <button id="encodeBtn">Encode</button>
-      <button id="decodeBtn" class="primary">Decode</button>
-    </div>
-
-    <h3>Result:</h3>
-    <div id="output">Key not loaded yet.</div>
-    <div id="coverage" class="muted" style="margin-top:6px"></div>
-  </div>
+  <h1>Loading system...</h1>
 
   <script>
-    // CONFIG
-    const SITE_PASSWORD = "letmein";
-    const USER_LIST = { jai: "Jai", declan: "Declan", xander: "Xander", xavier: "Xavier", tanis: "Tanis" };
-
-    // STATE
-    let keybook = {};
-    let currentChannel = "";
-
-    // HELPERS
-    const $ = id => document.getElementById(id);
-    const setOut = txt => { if ($('output')) $('output').innerText = txt; };
-    const delim = () => ($('delimiter').value || '|');
-
-    function sessionUser() { return sessionStorage.getItem("siteUser") || ""; }
-    function hasMap(ch) { return keybook && keybook[ch] && typeof keybook[ch] === "object" && Object.keys(keybook[ch]).length > 0; }
-
-    // Show coverage & missing chars for current input
-    function showCoveragePreview() {
-      if (!currentChannel || !hasMap(currentChannel)) { $('coverage').innerText = ''; return; }
-      const map = keybook[currentChannel];
-      const input = $('inputText').value || '';
-      const missing = new Set();
-      for (const ch of input) {
-        const key = ch; // case‑sensitive mapping
-        if (!(key in map)) missing.add(key);
-      }
-      if (missing.size) {
-        $('coverage').innerHTML = `Missing ${
-          missing.size
-        } char(s) in ${currentChannel}: ` + [...missing].slice(0, 20).map(c => `<code class="bad">${c === ' ' ? '␠' : c}</code>`).join(' ');
-      } else {
-        $('coverage').innerText = `All characters in the input are supported by ${currentChannel}.`;
-      }
-    }
-
-    // RENDER CHANNEL BUTTONS
-    function renderChannelButtons(){
-      const container = $('channelButtons');
-      container.innerHTML = "";
-      const channels = Object.keys(keybook || {});
-      if(!channels.length){ container.innerHTML = '<div class="muted">No channels found in key.json</div>'; return; }
-      channels.forEach((ch, idx) => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'channel-btn';
-        btn.dataset.channel = ch;
-        btn.innerText = ch;
-        if(!currentChannel && idx === 0) currentChannel = ch;
-        if(currentChannel === ch) btn.classList.add('active');
-        btn.addEventListener('click', () => {
-          Array.from(container.children).forEach(c => c.classList && c.classList.remove('active'));
-          btn.classList.add('active');
-          currentChannel = ch;
-          setOut("Channel selected: " + currentChannel);
-          showCoveragePreview();
-        });
-        container.appendChild(btn);
-      });
-    }
-
-    // LOAD KEY
-    async function loadKey(){
+    async function loadKey() {
       try {
-        const r = await fetch('key.json', { cache: 'no-store' });
-        if(!r.ok) throw new Error('key.json fetch failed: ' + r.status);
-        keybook = await r.json();
-        renderChannelButtons();
-        setOut("Key loaded. Ready to encode or decode.");
-        showCoveragePreview();
+        const response = await fetch("key.json");
+        const config = await response.json();
+
+        if (config.lockdown) {
+          document.body.innerHTML = "<h1>🔒 System is in lockdown</h1>";
+          return;
+        }
+
+        // Normal mode: show keys
+        document.body.innerHTML = "<h1>✅ System is active</h1><pre>" +
+          JSON.stringify(config.keys, null, 2) + "</pre>";
       } catch (err) {
-        console.error(err);
-        setOut("Failed to load key.json.");
+        document.body.innerHTML = "<h1>Error loading key.json</h1><p>" + err + "</p>";
       }
     }
 
-    // ENCODE (case‑sensitive; space is ' ' key, delimiter defaults to '|')
-    function encode(){
-      if(!currentChannel || !hasMap(currentChannel)){ setOut("No mapping for selected channel."); return; }
-      const map = keybook[currentChannel];
-      const input = $('inputText').value || '';
-      const d = delim();
-      const outCodes = [];
-      for (const ch of input) {
-        if (ch in map) outCodes.push(String(map[ch]));
-        else outCodes.push('?'); // unmapped char
-      }
-      setOut(outCodes.join(d) || "[empty]");
-    }
+    // Run on page load
+    window.addEventListener("load", loadKey);
 
-    // DECODE (split by delimiter; resolves exact codes back to characters)
-    function decode(){
-      if(!currentChannel || !hasMap(currentChannel)){ setOut("No mapping for selected channel."); return; }
-      const entered = (($('password').value || '').toLowerCase().trim());
-      const logged = sessionUser().toLowerCase();
-      if(!logged || logged !== entered){ setOut("Invalid user. Cannot decode."); return; }
-
-      const d = delim();
-      const forward = keybook[currentChannel];
-      const reverse = {};
-      for (const [k,v] of Object.entries(forward)) reverse[String(v)] = k;
-
-      const raw = ($('inputText').value || '').trim();
-      const tokens = raw.length ? raw.split(d) : [];
-      const decoded = tokens.map(t => (t in reverse ? reverse[t] : '?')).join('');
-      const displayName = USER_LIST[logged] || logged;
-      setOut(`Welcome, ${displayName}!\n\n${decoded || "[empty]"}`);
-    }
-
-    // EVENTS
-    document.addEventListener('DOMContentLoaded', () => {
-      $('enterBtn').addEventListener('click', async () => {
-        const user = (($('siteUser').value || '').toLowerCase().trim());
-        const pwd  = (($('sitePassword').value || '').trim());
-        if(!user){ $('loginError').innerText = "Enter a username."; return; }
-        if(pwd !== SITE_PASSWORD){ $('loginError').innerText = "Incorrect site password."; return; }
-        sessionStorage.setItem('siteUser', user);
-        $('loginError').innerText = "";
-        $('loginScreen').style.display = 'none';
-        $('mainApp').style.display = 'block';
-        await loadKey();
-      });
-
-      $('guestBtn').addEventListener('click', () => {
-        sessionStorage.removeItem('siteUser');
-        $('loginError').innerText = "Guest mode: decoding requires username match.";
-        $('loginScreen').style.display = 'none';
-        $('mainApp').style.display = 'block';
-        loadKey();
-      });
-
-      $('encodeBtn').addEventListener('click', encode);
-      $('decodeBtn').addEventListener('click', decode);
-      $('inputText').addEventListener('input', showCoveragePreview);
-      $('delimiter').addEventListener('input', () => setTimeout(showCoveragePreview, 0));
-    });
+    // Also auto-refresh with JS every 3 minutes (backup to meta refresh)
+    setInterval(() => {
+      location.reload();
+    }, 180000);
   </script>
 </body>
 </html>
