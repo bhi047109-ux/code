@@ -1,45 +1,95 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Key System</title>
-  <!-- Auto-refresh every 3 minutes -->
-  <meta http-equiv="refresh" content="180">
+  <meta charset="utf-8" />
+  <title>Encoder / Decoder</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
-    h1 { color: #333; }
-    pre { text-align: left; margin: 20px auto; width: 80%; background: #f4f4f4; padding: 10px; border-radius: 6px; }
+    body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;margin:24px auto;padding:20px;max-width:860px;color:#111}
+    label{display:block;margin:8px 0 6px;font-weight:600}
+    input,textarea,button{font:inherit}
+    input,textarea{width:100%;padding:8px;border:1px solid #dcdcdc;border-radius:6px;box-sizing:border-box}
+    textarea{min-height:140px;resize:vertical}
+    button{padding:8px 12px;border-radius:6px;border:1px solid #bbb;background:#fff;cursor:pointer}
+    button.primary{background:#0366d6;color:#fff;border-color:#0366d6}
+    #output{white-space:pre-wrap;background:#fafafa;padding:12px;border:1px solid #eee;border-radius:6px;min-height:80px}
+    .channel-btn{padding:8px 12px;border:1px solid #ccc;border-radius:8px;background:#fff;cursor:pointer;font-weight:600;margin:4px}
+    .channel-btn.active{background:#0366d6;color:#fff;border-color:#0366d6}
   </style>
 </head>
 <body>
-  <h1>Loading system...</h1>
+  <h1>Encoder / Decoder</h1>
+
+  <label>Choose Channel</label>
+  <div id="channelButtons"></div>
+
+  <label for="delimiter">Delimiter</label>
+  <input id="delimiter" type="text" value="|" style="width:100px" />
+
+  <label for="inputText">Input (text to encode or codes to decode)</label>
+  <textarea id="inputText"></textarea>
+
+  <div style="margin:12px 0">
+    <button id="encodeBtn">Encode</button>
+    <button id="decodeBtn" class="primary">Decode</button>
+  </div>
+
+  <h3>Result:</h3>
+  <div id="output">Key not loaded yet.</div>
 
   <script>
-    async function loadKey() {
-      try {
-        const response = await fetch("key.json");
-        const config = await response.json();
+    let keybook = {}, currentChannel = "";
 
-        if (config.lockdown) {
-          document.body.innerHTML = "<h1>🔒 System is in lockdown</h1>";
-          return;
-        }
+    const $ = id => document.getElementById(id);
+    const setOut = txt => { $('output').innerText = txt; };
+    const delim = () => ($('delimiter').value || '|');
 
-        // Normal mode: show keys
-        document.body.innerHTML = "<h1>✅ System is active</h1><pre>" +
-          JSON.stringify(config.keys, null, 2) + "</pre>";
-      } catch (err) {
-        document.body.innerHTML = "<h1>Error loading key.json</h1><p>" + err + "</p>";
-      }
+    function renderChannelButtons(){
+      const container = $('channelButtons'); container.innerHTML="";
+      const channels = Object.keys(keybook).filter(k => k !== "lockdown");
+      channels.forEach((ch,idx)=>{
+        const btn=document.createElement('button');
+        btn.type='button'; btn.className='channel-btn'; btn.innerText=ch;
+        if(!currentChannel && idx===0) currentChannel=ch;
+        if(currentChannel===ch) btn.classList.add('active');
+        btn.onclick=()=>{ [...container.children].forEach(c=>c.classList.remove('active')); btn.classList.add('active'); currentChannel=ch; setOut("Channel selected: "+ch); };
+        container.appendChild(btn);
+      });
     }
 
-    // Run on page load
-    window.addEventListener("load", loadKey);
+    async function loadKey(){
+      try{
+        const r=await fetch('key.json',{cache:'no-store'});
+        keybook=await r.json();
+        if(keybook.lockdown){ setOut("🔒 System is in lockdown"); return; }
+        renderChannelButtons();
+        setOut("Key loaded. Select a channel.");
+      }
+      catch(e){ setOut("Failed to load key.json."); }
+    }
 
-    // Also auto-refresh with JS every 3 minutes (backup to meta refresh)
-    setInterval(() => {
-      location.reload();
-    }, 180000);
+    function encode(){
+      if(!currentChannel){ setOut("No channel selected."); return; }
+      const map=keybook[currentChannel], input=$('inputText').value||'', d=delim();
+      const out=[...input].map(ch=>map[ch]!==undefined?map[ch]:'?').join(d);
+      setOut(out||"[empty]");
+    }
+
+    function decode(){
+      if(!currentChannel){ setOut("No channel selected."); return; }
+      const forward=keybook[currentChannel], reverse={};
+      for(const [k,v] of Object.entries(forward)) reverse[v]=k;
+      const tokens=($('inputText').value||'').split(delim()).filter(Boolean);
+      const decoded=tokens.map(t=>reverse[t]||'?').join('');
+      setOut(decoded||"[empty]");
+    }
+
+    document.addEventListener('DOMContentLoaded',()=>{
+      $('encodeBtn').onclick=encode;
+      $('decodeBtn').onclick=decode;
+      loadKey();
+    });
   </script>
 </body>
 </html>
+
