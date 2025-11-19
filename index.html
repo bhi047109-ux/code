@@ -9,11 +9,10 @@
   <style>
     body {
       font-family: system-ui, Segoe UI, Roboto, Arial, sans-serif;
-      margin: 24px auto;
-      padding: 20px;
-      max-width: 860px;
-      color: #111;
-      background: #f9f9f9;
+      margin: 0;
+      padding: 0;
+      background: #111;
+      color: #eee;
     }
     h1 { margin-bottom: 20px; }
     label { display:block; margin:8px 0 6px; font-weight:600 }
@@ -30,7 +29,8 @@
     button.primary { background:#0366d6; color:#fff; border-color:#0366d6 }
     #output {
       white-space:pre-wrap; background:#fafafa; padding:12px;
-      border:1px solid #eee; border-radius:6px; min-height:80px
+      border:1px solid #eee; border-radius:6px; min-height:80px;
+      color:#111;
     }
     .channel-btn {
       padding:8px 12px; border:1px solid #ccc; border-radius:8px;
@@ -39,26 +39,48 @@
     .channel-btn.active {
       background:#0366d6; color:#fff; border-color:#0366d6
     }
+
     /* Lockdown animation */
+    #lockdownScreen {
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      height:100vh;
+      flex-direction:column;
+      background: repeating-linear-gradient(
+        45deg,
+        #b00020,
+        #b00020 20px,
+        #111 20px,
+        #111 40px
+      );
+      animation: flashbg 1s infinite;
+    }
     .lockdown {
-      font-size:2em; color:#b00020; text-align:center;
-      animation:pulse 1.5s infinite;
+      font-size:3em;
+      color:#fff;
+      text-shadow:0 0 10px #ff0000, 0 0 20px #ff0000, 0 0 40px #ff0000;
+      animation: pulse 1.5s infinite;
     }
     @keyframes pulse {
-      0% { opacity:1; transform:scale(1); }
-      50% { opacity:0.5; transform:scale(1.1); }
-      100% { opacity:1; transform:scale(1); }
+      0% { transform:scale(1); opacity:1; }
+      50% { transform:scale(1.2); opacity:0.6; }
+      100% { transform:scale(1); opacity:1; }
+    }
+    @keyframes flashbg {
+      0%,100% { filter:brightness(1); }
+      50% { filter:brightness(0.6); }
     }
   </style>
 </head>
 <body>
-  <h1>Encoder / Decoder</h1>
-
   <div id="lockdownScreen" style="display:none">
-    <h1 class="lockdown">🔒 SYSTEM LOCKDOWN</h1>
+    <h1 class="lockdown">🚨 SYSTEM LOCKDOWN 🚨</h1>
+    <p style="color:#fff;font-size:1.2em;">Access denied until lockdown is lifted</p>
   </div>
 
-  <div id="mainApp" style="display:none">
+  <div id="mainApp" style="display:none; padding:20px;">
+    <h1>Encoder / Decoder</h1>
     <label>Choose Channel</label>
     <div id="channelButtons"></div>
 
@@ -103,7 +125,7 @@
         keybook=await r.json();
         if(keybook.lockdown){
           $('mainApp').style.display='none';
-          $('lockdownScreen').style.display='block';
+          $('lockdownScreen').style.display='flex';
           return;
         }
         $('lockdownScreen').style.display='none';
