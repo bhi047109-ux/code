@@ -9,44 +9,38 @@
   <style>
     body {
       font-family: system-ui, Segoe UI, Roboto, Arial, sans-serif;
-      margin: 0;
-      padding: 0;
-      background: #111;
-      color: #eee;
+      margin: 0; padding: 0; background: #111; color: #eee;
     }
+    .container { max-width: 860px; margin: 24px auto; padding: 20px; }
     h1 { margin-bottom: 20px; }
     label { display:block; margin:8px 0 6px; font-weight:600 }
     input,textarea,button { font:inherit }
     input,textarea {
-      width:100%; padding:8px; border:1px solid #dcdcdc;
-      border-radius:6px; box-sizing:border-box
+      width:100%; padding:8px; border:1px solid #444;
+      border-radius:6px; box-sizing:border-box; background:#1a1a1a; color:#eee;
     }
     textarea { min-height:140px; resize:vertical }
     button {
-      padding:8px 12px; border-radius:6px; border:1px solid #bbb;
-      background:#fff; cursor:pointer
+      padding:8px 12px; border-radius:6px; border:1px solid #666;
+      background:#222; color:#eee; cursor:pointer
     }
     button.primary { background:#0366d6; color:#fff; border-color:#0366d6 }
     #output {
-      white-space:pre-wrap; background:#fafafa; padding:12px;
-      border:1px solid #eee; border-radius:6px; min-height:80px;
-      color:#111;
+      white-space:pre-wrap; background:#0f0f0f; padding:12px;
+      border:1px solid #333; border-radius:6px; min-height:80px; color:#eee;
     }
     .channel-btn {
-      padding:8px 12px; border:1px solid #ccc; border-radius:8px;
-      background:#fff; cursor:pointer; font-weight:600; margin:4px
+      padding:8px 12px; border:1px solid #666; border-radius:8px;
+      background:#222; cursor:pointer; font-weight:600; margin:4px
     }
-    .channel-btn.active {
-      background:#0366d6; color:#fff; border-color:#0366d6
-    }
+    .channel-btn.active { background:#0366d6; color:#fff; border-color:#0366d6 }
+    .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center }
+    .muted { color:#bbb; font-size:13px }
 
     /* Lockdown animation */
     #lockdownScreen {
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      height:100vh;
-      flex-direction:column;
+      display:none; align-items:center; justify-content:center;
+      height:100vh; flex-direction:column;
       background: repeating-linear-gradient(
         45deg,
         #b00020,
@@ -55,16 +49,19 @@
         #111 40px
       );
       animation: flashbg 1s infinite;
+      text-align:center;
     }
-    .lockdown {
-      font-size:3em;
-      color:#fff;
+    .lockTitle {
+      font-size:3em; color:#fff;
       text-shadow:0 0 10px #ff0000, 0 0 20px #ff0000, 0 0 40px #ff0000;
       animation: pulse 1.5s infinite;
+      margin: 0;
     }
+    .lockSub { color:#fff; font-size:1.2em; margin-top:8px }
+    .countdown { margin-top:12px; color:#fff }
     @keyframes pulse {
       0% { transform:scale(1); opacity:1; }
-      50% { transform:scale(1.2); opacity:0.6; }
+      50% { transform:scale(1.15); opacity:0.7; }
       100% { transform:scale(1); opacity:1; }
     }
     @keyframes flashbg {
@@ -74,18 +71,30 @@
   </style>
 </head>
 <body>
-  <div id="lockdownScreen" style="display:none">
-    <h1 class="lockdown">🚨 SYSTEM LOCKDOWN 🚨</h1>
-    <p style="color:#fff;font-size:1.2em;">Access denied until lockdown is lifted</p>
+  <div id="lockdownScreen">
+    <h1 class="lockTitle">🚨 SYSTEM LOCKDOWN 🚨</h1>
+    <p class="lockSub">Access denied until lockdown is lifted</p>
+    <div class="countdown">Refreshing in <span id="cd">120</span>s…</div>
   </div>
 
-  <div id="mainApp" style="display:none; padding:20px;">
+  <div id="mainApp" class="container" style="display:none">
     <h1>Encoder / Decoder</h1>
-    <label>Choose Channel</label>
-    <div id="channelButtons"></div>
 
-    <label for="delimiter">Delimiter</label>
-    <input id="delimiter" type="text" value="|" style="width:100px" />
+    <label>Choose Channel</label>
+    <div id="channelButtons" class="row"></div>
+
+    <div class="row">
+      <div>
+        <label for="delimiter">Delimiter</label>
+        <input id="delimiter" type="text" value="|" style="width:120px" />
+        <div class="muted">Use a delimiter that won't appear in your codes</div>
+      </div>
+      <div>
+        <label for="normalize">Normalize whitespace</label>
+        <input id="normalize" type="checkbox" checked />
+        <div class="muted">Converts tabs/newlines to spaces for encoding</div>
+      </div>
+    </div>
 
     <label for="inputText">Input (text to encode or codes to decode)</label>
     <textarea id="inputText"></textarea>
@@ -97,14 +106,26 @@
 
     <h3>Result:</h3>
     <div id="output">Key not loaded yet.</div>
+    <div id="coverage" class="muted" style="margin-top:6px"></div>
   </div>
 
   <script>
     let keybook = {}, currentChannel = "";
-
     const $ = id => document.getElementById(id);
     const setOut = txt => { $('output').innerText = txt; };
+    const setCov = txt => { $('coverage').innerText = txt; };
     const delim = () => ($('delimiter').value || '|');
+
+    // Encode a single character with fallback UNK token
+    function encodeChar(ch, map, prefix) {
+      if (map[ch] !== undefined) return map[ch];
+      // Optional normalization for common whitespace variants
+      if (ch === '\n' && map['\\n'] !== undefined) return map['\\n'];
+      if (ch === '\t' && map['\\t'] !== undefined) return map['\\t'];
+      // Fallback: deterministic unknown token using UTF-16 hex
+      const hex = ch.split('').map(c => c.charCodeAt(0).toString(16).padStart(2, '0')).join('');
+      return `${prefix}_UNK_${hex}`;
+    }
 
     function renderChannelButtons(){
       const container = $('channelButtons'); container.innerHTML="";
@@ -114,7 +135,11 @@
         btn.type='button'; btn.className='channel-btn'; btn.innerText=ch;
         if(!currentChannel && idx===0) currentChannel=ch;
         if(currentChannel===ch) btn.classList.add('active');
-        btn.onclick=()=>{ [...container.children].forEach(c=>c.classList.remove('active')); btn.classList.add('active'); currentChannel=ch; setOut("Channel selected: "+ch); };
+        btn.onclick=()=>{
+          [...container.children].forEach(c=>c.classList.remove('active'));
+          btn.classList.add('active'); currentChannel=ch;
+          setOut("Channel selected: "+ch); setCov("");
+        };
         container.appendChild(btn);
       });
     }
@@ -126,30 +151,84 @@
         if(keybook.lockdown){
           $('mainApp').style.display='none';
           $('lockdownScreen').style.display='flex';
+          startCountdown(120);
           return;
         }
         $('lockdownScreen').style.display='none';
         $('mainApp').style.display='block';
         renderChannelButtons();
         setOut("Key loaded. Select a channel.");
+        setCov("");
       }
-      catch(e){ setOut("Failed to load key.json."); }
+      catch(e){ setOut("Failed to load key.json."); setCov(""); }
     }
 
     function encode(){
-      if(!currentChannel){ setOut("No channel selected."); return; }
-      const map=keybook[currentChannel], input=$('inputText').value||'', d=delim();
-      const out=[...input].map(ch=>map[ch]!==undefined?map[ch]:'?').join(d);
-      setOut(out||"[empty]");
+      if(!currentChannel){ setOut("No channel selected."); setCov(""); return; }
+      const map=keybook[currentChannel], inputRaw=$('inputText').value||'', d=delim();
+      const prefix = currentChannel; // ch1 or ch2
+      const input = ($('normalize').checked) ? inputRaw.replace(/\r?\n|\t/g, ' ') : inputRaw;
+
+      let unknownCount = 0;
+      const out = [...input].map(ch => {
+        const token = encodeChar(ch, map, prefix);
+        if (token.startsWith(prefix + '_UNK_')) unknownCount++;
+        return token;
+      }).join(d);
+
+      setOut(out || "[empty]");
+      const total = input.length;
+      const known = total - unknownCount;
+      setCov(`Coverage: ${known}/${total} known (${Math.round((known/Math.max(total,1))*100)}%). Unknowns are encoded as ${prefix}_UNK_<hex>.`);
     }
 
     function decode(){
-      if(!currentChannel){ setOut("No channel selected."); return; }
+      if(!currentChannel){ setOut("No channel selected."); setCov(""); return; }
       const forward=keybook[currentChannel], reverse={};
       for(const [k,v] of Object.entries(forward)) reverse[v]=k;
-      const tokens=($('inputText').value||'').split(delim()).filter(Boolean);
-      const decoded=tokens.map(t=>reverse[t]||'?').join('');
-      setOut(decoded||"[empty]");
+
+      const tokens=($('inputText').value||'').split(delim()).filter(t => t.length > 0);
+      let unknownCount = 0;
+
+      const decoded = tokens.map(t => {
+        // Recognize UNK fallback
+        const prefix = currentChannel + '_UNK_';
+        if (t.startsWith(prefix)) {
+          const hex = t.slice(prefix.length);
+          try {
+            // Decode hex back to characters
+            if (!/^[0-9a-fA-F]+$/.test(hex)) throw new Error('bad hex');
+            let out = '';
+            for (let i = 0; i < hex.length; i += 2) {
+              out += String.fromCharCode(parseInt(hex.slice(i, i+2), 16));
+            }
+            return out;
+          } catch {
+            unknownCount++;
+            return '?';
+          }
+        }
+        if (reverse[t] !== undefined) return reverse[t];
+        unknownCount++;
+        return '?';
+      }).join('');
+
+      setOut(decoded || "[empty]");
+      const total = tokens.length;
+      const known = total - unknownCount;
+      setCov(`Decoded tokens: ${known}/${total} resolved (${Math.round((known/Math.max(total,1))*100)}%). Unknown tokens show as "?".`);
+    }
+
+    // Lockdown countdown
+    function startCountdown(seconds) {
+      const cd = $('cd');
+      let remaining = seconds;
+      cd.textContent = remaining;
+      const iv = setInterval(() => {
+        remaining--;
+        cd.textContent = remaining;
+        if (remaining <= 0) clearInterval(iv);
+      }, 1000);
     }
 
     document.addEventListener('DOMContentLoaded',()=>{
@@ -159,9 +238,7 @@
     });
 
     // Auto-refresh every 2 minutes
-    setInterval(() => {
-      location.reload();
-    }, 120000);
+    setInterval(() => { location.reload(); }, 120000);
   </script>
 </body>
 </html>
