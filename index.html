@@ -2,112 +2,78 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Encoder / Decoder</title>
+  <title>Encoder / Decoder Console</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta http-equiv="refresh" content="120">
   <style>
-    body {
-      font-family: system-ui, Segoe UI, Roboto, Arial, sans-serif;
-      margin: 0; padding: 0;
-      background: #111; color: #eee;
-      transition: background 0.5s, color 0.5s;
+    :root {
+      --bg: #111; --fg: #eee; --muted: #bbb; --panel: #0f0f0f;
+      --border: #333; --accent: #0366d6; --danger: #b00020;
     }
-    .container { max-width: 860px; margin: 24px auto; padding: 20px; }
-    h1 { margin-bottom: 20px; }
+    body { font-family: system-ui, monospace; margin:0; padding:0;
+      background:var(--bg); color:var(--fg); transition:background 0.5s,color 0.5s; overflow-x:hidden; }
+    .container { max-width:960px; margin:24px auto; padding:20px; }
+    h1 { margin-bottom:16px; } h3 { margin-top:20px; margin-bottom:8px; }
     label { display:block; margin:8px 0 6px; font-weight:600 }
     input,textarea,button { font:inherit }
-    input,textarea {
-      width:100%; padding:8px; border:1px solid #444;
-      border-radius:6px; box-sizing:border-box; background:#1a1a1a; color:#eee;
-    }
-    textarea { min-height:140px; resize:vertical }
-    button {
-      padding:8px 12px; border-radius:6px; border:1px solid #666;
-      background:#222; color:#eee; cursor:pointer; transition: all 0.3s;
-    }
-    button:hover { transform: scale(1.05); }
-    button.primary { background:#0366d6; color:#fff; border-color:#0366d6 }
-    #output {
-      white-space:pre-wrap; background:#0f0f0f; padding:12px;
-      border:1px solid #333; border-radius:6px; min-height:80px; color:#eee;
-    }
-    .channel-btn {
-      padding:8px 12px; border:1px solid #666; border-radius:8px;
-      background:#222; cursor:pointer; font-weight:600; margin:4px;
-      animation: glow 2s infinite alternate;
-    }
-    .channel-btn.active { background:#0366d6; color:#fff; border-color:#0366d6 }
+    input,textarea { width:100%; padding:8px; border:1px solid #444; border-radius:6px;
+      box-sizing:border-box; background:#1a1a1a; color:var(--fg); }
+    textarea { min-height:140px; resize:vertical; font-family:monospace; }
+    button { padding:8px 12px; border-radius:6px; border:1px solid #666; background:#222; color:var(--fg);
+      cursor:pointer; transition:all 0.3s; }
+    button:hover { transform:scale(1.05); }
+    button.primary { background:var(--accent); color:#fff; border-color:var(--accent) }
+    #output { white-space:pre-wrap; background:var(--panel); padding:12px; border:1px solid var(--border);
+      border-radius:6px; min-height:80px; color:var(--fg); font-family:monospace; }
     .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center }
-    .muted { color:#bbb; font-size:13px }
+    .muted { color:var(--muted); font-size:13px }
+    .channel-btn { padding:8px 12px; border:1px solid #666; border-radius:8px; background:#222;
+      cursor:pointer; font-weight:600; margin:4px; animation:glow 2s infinite alternate; }
+    .channel-btn.active { background:var(--accent); color:#fff; border-color:var(--accent) }
+    @keyframes glow { from{box-shadow:0 0 6px var(--accent);} to{box-shadow:0 0 18px var(--accent);} }
 
-    /* Lockdown animation */
-    #lockdownScreen {
-      display:none; align-items:center; justify-content:center;
-      height:100vh; flex-direction:column;
-      background: repeating-linear-gradient(
-        45deg,
-        #b00020,
-        #b00020 20px,
-        #111 20px,
-        #111 40px
-      );
-      background-size: 80px 80px;
-      animation: stripesMove 2s linear infinite, flashbg 1s infinite;
-      text-align:center;
-    }
-    .lockTitle {
-      font-size:3em; color:#fff;
-      text-shadow:0 0 10px #ff0000, 0 0 20px #ff0000, 0 0 40px #ff0000;
-      animation: pulse 1.5s infinite;
-      margin: 0;
-    }
-    .lockSub { color:#fff; font-size:1.2em; margin-top:8px }
-    .countdown { margin-top:12px; color:#fff }
-    #progressBar {
-      width:80%; height:20px; background:#333; border-radius:10px;
-      margin-top:10px; overflow:hidden;
-    }
-    #progressFill {
-      height:100%; background:#ff0000; width:100%; transition: width 1s linear;
-    }
-    @keyframes pulse {
-      0% { transform:scale(1); opacity:1; }
-      50% { transform:scale(1.15); opacity:0.7; }
-      100% { transform:scale(1); opacity:1; }
-    }
-    @keyframes flashbg {
-      0%,100% { filter:brightness(1); }
-      50% { filter:brightness(0.6); }
-    }
-    @keyframes stripesMove {
-      from { background-position: 0 0; }
-      to   { background-position: 80px 80px; }
-    }
-    @keyframes glow {
-      from { box-shadow: 0 0 5px #0366d6; }
-      to   { box-shadow: 0 0 20px #0366d6; }
-    }
+    /* Lockdown */
+    #lockdownScreen { display:none; align-items:center; justify-content:center; height:100vh; flex-direction:column;
+      text-align:center; background:repeating-linear-gradient(45deg,var(--danger),var(--danger) 20px,#111 20px,#111 40px);
+      background-size:80px 80px; animation:stripesMove 2s linear infinite,flashbg 1.1s infinite; }
+    @keyframes stripesMove { from{background-position:0 0;} to{background-position:80px 80px;} }
+    @keyframes flashbg { 0%,100%{filter:brightness(1);} 50%{filter:brightness(0.7);} }
+    .lockTitle { font-size:3em; color:#fff; margin:0; text-shadow:0 0 10px #f00,0 0 24px #f00; animation:pulse 1.5s infinite; }
+    .lockSub { color:#fff; font-size:1.1em; margin-top:8px }
+    .countdown { margin-top:12px; color:#fff; font-family:monospace; }
+    @keyframes pulse { 0%{transform:scale(1);} 50%{transform:scale(1.12);} 100%{transform:scale(1);} }
+    #progressBar { width:80%; height:20px; background:#333; border-radius:10px; margin-top:10px; overflow:hidden;
+      box-shadow:inset 0 0 8px rgba(0,0,0,0.5); }
+    #progressFill { height:100%; background:#ff2a2a; width:100%; transition:width 1s linear; }
+
+    /* Glitch */
+    .glitch { position:relative; text-shadow:0 0 2px rgba(255,255,255,0.5); animation:glitchy 2s infinite; }
+    @keyframes glitchy { 0%{transform:translate(0,0);} 20%{transform:translate(1px,-1px);} 40%{transform:translate(-1px,1px);}
+      60%{transform:translate(1px,1px);} 80%{transform:translate(-1px,-1px);} 100%{transform:translate(0,0);} }
+
+    /* Matrix rain */
+    canvas#matrix { position:fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:-1; }
 
     /* Light theme */
-    body.light { background:#f9f9f9; color:#111; }
-    body.light input, body.light textarea { background:#fff; color:#111; border:1px solid #ccc; }
-    body.light #output { background:#fafafa; color:#111; border:1px solid #ddd; }
+    body.light { --bg:#f9f9f9; --fg:#111; --muted:#555; --panel:#fafafa; --border:#ddd; --accent:#0b62ff; }
+    body.light input,body.light textarea { background:#fff; color:#111; border:1px solid #ccc; }
     body.light button { background:#eee; color:#111; border:1px solid #aaa; }
-    body.light .channel-btn { background:#eee; color:#111; border:1px solid #aaa; }
   </style>
 </head>
 <body>
+  <canvas id="matrix"></canvas>
+
   <div id="lockdownScreen">
     <h1 class="lockTitle">🚨 SYSTEM LOCKDOWN 🚨</h1>
     <p class="lockSub">Access denied until lockdown is lifted</p>
     <div class="countdown">Refreshing in <span id="cd">120</span>s…</div>
     <div id="progressBar"><div id="progressFill"></div></div>
     <audio id="siren" src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg"></audio>
+    <div class="muted" style="margin-top:10px">Press Esc to attempt override</div>
   </div>
 
   <div id="mainApp" class="container" style="display:none">
     <h1>Encoder / Decoder</h1>
-
     <label>Choose Channel</label>
     <div id="channelButtons" class="row"></div>
 
@@ -116,44 +82,60 @@
         <label for="delimiter">Delimiter</label>
         <input id="delimiter" type="text" value="|" style="width:120px" />
       </div>
-      <div class="row">
+      <div class="row" style="gap:6px">
         <button id="themeToggle">Toggle Theme</button>
         <button id="randomGen">Random Test</button>
+        <button id="toggleGlitch">Toggle Glitch</button>
+        <button id="toggleRain">Toggle Matrix Rain</button>
       </div>
     </div>
 
-    <label for="inputText">Input (text to encode or codes to decode)</label>
+    <label for="inputText">Input</label>
     <textarea id="inputText"></textarea>
 
-    <div style="margin:12px 0">
+    <div style="margin:12px 0; display:flex; gap:8px; flex-wrap:wrap">
       <button id="encodeBtn">Encode</button>
       <button id="decodeBtn" class="primary">Decode</button>
       <button id="copyBtn">Copy Output</button>
+      <button id="scrambleBtn">Scramble Output</button>
     </div>
 
     <h3>Result:</h3>
     <div id="output">Key not loaded yet.</div>
-    <div id="coverage" class="muted" style="margin-top:6px"></div>
-    <div id="lengthCounter" class="muted"></div>
+    <div class="row" style="gap:16px">
+      <div id="coverage" class="muted"></div>
+      <div id="lengthCounter" class="muted"></div>
+      <div id="speedMeter" class="muted"></div>
+      <div id="entropyMeter" class="muted"></div>
+    </div>
 
     <h3>History:</h3>
-    <div id="history" class="muted"></div>
+    <div id="history" class="muted" style="max-height:220px; overflow:auto; border:1px solid #333; border-radius:6px; padding:8px"></div>
+
+    <h3>Tools:</h3>
+    <div class="row" style="gap:8px">
+      <button id="exportHistory">Export History</button>
+      <button id="toggleSiren">Toggle Siren</button>
+      <button id="toggleShake">Shake Lockdown
+            <div id="qrPanel" style="margin-top:16px">
+      <h3>QR (encoded output)</h3>
+      <canvas id="qrCanvas" width="256" height="256" style="background:#fff; border:1px solid #444"></canvas>
+      <div class="muted">Toy QR pattern generator (visual only).</div>
+    </div>
   </div>
 
   <script>
     let keybook = {}, currentChannel = "";
+    let sirenEnabled = true, rainEnabled = false;
+
     const $ = id => document.getElementById(id);
+    const now = () => performance.now();
     const setOut = txt => { $('output').innerText = txt; };
     const setCov = txt => { $('coverage').innerText = txt; };
     const setLen = txt => { $('lengthCounter').innerText = txt; };
+    const setSpeed = txt => { $('speedMeter').innerText = txt; };
+    const setEntropy = txt => { $('entropyMeter').innerText = txt; };
     const delim = () => ($('delimiter').value || '|');
-
-    // Channel glow colors
-    const channelGlow = {
-      ch1: '#ff4d4d',
-      ch2: '#4da6ff',
-      default: '#0366d6'
-    };
 
     function renderChannelButtons(){
       const container = $('channelButtons'); container.innerHTML="";
@@ -161,17 +143,12 @@
       channels.forEach((ch,idx)=>{
         const btn=document.createElement('button');
         btn.type='button'; btn.className='channel-btn'; btn.innerText=ch;
-        // Per-channel glow color
-        const color = channelGlow[ch] || channelGlow.default;
-        btn.style.boxShadow = `0 0 10px ${color}`;
-        btn.style.borderColor = color;
-
         if(!currentChannel && idx===0) currentChannel=ch;
         if(currentChannel===ch) btn.classList.add('active');
         btn.onclick=()=>{
           [...container.children].forEach(c=>c.classList.remove('active'));
           btn.classList.add('active'); currentChannel=ch;
-          setOut("Channel selected: "+ch); setCov(""); setLen("");
+          setOut("Channel selected: "+ch); setCov(""); setLen(""); setSpeed(""); setEntropy("");
         };
         container.appendChild(btn);
       });
@@ -185,43 +162,46 @@
           $('mainApp').style.display='none';
           $('lockdownScreen').style.display='flex';
           startCountdown(120);
-          try { $('siren').currentTime = 0; $('siren').play(); } catch(e) {}
+          if (sirenEnabled) try { $('siren').currentTime = 0; $('siren').play(); } catch(e) {}
           return;
         }
         $('lockdownScreen').style.display='none';
         $('mainApp').style.display='block';
         renderChannelButtons();
         setOut("Key loaded. Select a channel.");
-        setCov(""); setLen("");
+      } catch(e){
+        setOut("Failed to load key.json.");
       }
-      catch(e){ setOut("Failed to load key.json."); setCov(""); }
     }
 
     function encode(){
-      if(!currentChannel){ setOut("No channel selected."); setCov(""); setLen(""); return; }
+      if(!currentChannel){ setOut("No channel selected."); return; }
+      const t0 = now();
       const map=keybook[currentChannel], input=$('inputText').value||'', d=delim();
       let unknownCount=0;
       const out=[...input].map(ch=>{
         if(map[ch]!==undefined) return map[ch];
-        // Encode unknown deterministically to avoid data loss on round-trip
         unknownCount++; return currentChannel+"_UNK_"+ch.charCodeAt(0).toString(16).padStart(2,'0');
       }).join(d);
-
+      const t1 = now();
       setOut(out||"[empty]");
-      setCov(`Coverage: ${input.length - unknownCount}/${input.length} known`);
+      setCov(`Coverage: ${input.length - unknownCount}/${input.length}`);
       setLen(`Output tokens: ${out ? out.split(d).filter(Boolean).length : 0}`);
+      setSpeed(`Encode: ${(t1 - t0).toFixed(2)} ms`);
+      setEntropy(`Input entropy: ${entropyBits(input).toFixed(2)} bits`);
       addHistory("Encoded", input, out);
+      drawToyQR(out);
+      if (rainEnabled) kickMatrixRain();
     }
 
     function decode(){
-      if(!currentChannel){ setOut("No channel selected."); setCov(""); setLen(""); return; }
+      if(!currentChannel){ setOut("No channel selected."); return; }
+      const t0 = now();
       const forward=keybook[currentChannel], reverse={};
       for(const [k,v] of Object.entries(forward)) reverse[v]=k;
-
       const d = delim();
       const tokens=($('inputText').value||'').split(d).filter(t => t.length > 0);
       let unknownCount=0;
-
       const decoded = tokens.map(t=>{
         const prefix = currentChannel + "_UNK_";
         if (t.startsWith(prefix)) {
@@ -233,83 +213,141 @@
         if (reverse[t] !== undefined) return reverse[t];
         unknownCount++; return '?';
       }).join('');
-
+      const t1 = now();
       setOut(decoded || "[empty]");
-      setCov(`Decoded tokens: ${tokens.length - unknownCount}/${tokens.length} resolved`);
+      setCov(`Decoded tokens: ${tokens.length - unknownCount}/${tokens.length}`);
       setLen(`Input tokens: ${tokens.length}`);
+      setSpeed(`Decode: ${(t1 - t0).toFixed(2)} ms`);
+      setEntropy(`Output entropy: ${entropyBits(decoded).toFixed(2)} bits`);
       addHistory("Decoded", $('inputText').value, decoded);
+      drawToyQR(decoded);
+      if (rainEnabled) kickMatrixRain();
     }
 
-    // Copy to clipboard
     function copyOutput(){
       const text = $('output').innerText;
       if (!text) return;
-      navigator.clipboard.writeText(text).then(()=>{
-        flashMsg('Copied output to clipboard');
-      }).catch(()=>{
-        flashMsg('Copy failed');
-      });
+      navigator.clipboard.writeText(text).then(()=>toast('Copied output')).catch(()=>toast('Copy failed'));
     }
 
-    // Random test generator (letters, digits, punctuation)
     function randomTest(){
       const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 !@#$%^&*()-_=+[]{};:'\",./?<>";
       let s = '';
-      const len = 32 + Math.floor(Math.random()*32);
-      for (let i=0;i<len;i++){
-        s += charset[Math.floor(Math.random()*charset.length)];
-      }
+      const len = 36 + Math.floor(Math.random()*28);
+      for (let i=0;i<len;i++) s += charset[Math.floor(Math.random()*charset.length)];
       $('inputText').value = s;
-      flashMsg('Generated random test input');
+      toast('Generated random input');
     }
 
-    // Theme toggle
-    function toggleTheme(){
-      document.body.classList.toggle('light');
+    function toggleGlitch(){ $('output').classList.toggle('glitch'); }
+    function toggleTheme(){ document.body.classList.toggle('light'); }
+    function scrambleOutput(){
+      const d = delim();
+      const out = $('output').innerText;
+      if (!out || !out.includes(d)) { toast('Nothing to scramble'); return; }
+      const toks = out.split(d).filter(Boolean);
+      for (let i = toks.length - 1; i > 0; i--){
+        const j = Math.floor(Math.random() * (i + 1));
+        [toks[i], toks[j]] = [toks[j], toks[i]];
+      }
+      setOut(toks.join(d));
+      toast('Scrambled tokens');
     }
 
-    // History with auto-scroll and entry formatting
     function addHistory(action, input, result){
       const h = $('history');
       const entry = document.createElement('div');
       entry.style.borderTop = '1px solid #333';
       entry.style.padding = '8px 0';
-      entry.style.opacity = '0';
-      entry.style.transition = 'opacity 0.4s';
-
       const ts = new Date().toLocaleTimeString();
       entry.innerHTML = `<strong>${action}</strong> <span class="muted">(${ts})</span><br>
-        <span class="muted">Input:</span> ${escapeHtml(input || '')}<br>
-        <span class="muted">Result:</span> ${escapeHtml(result || '')}`;
+        <span class="muted">Input:</span> ${input}<br>
+        <span class="muted">Result:</span> ${result}`;
       h.appendChild(entry);
-      // Slide in effect via opacity
-      requestAnimationFrame(()=>{ entry.style.opacity = '1'; });
       h.scrollTop = h.scrollHeight;
     }
 
-    function escapeHtml(str){
-      return str.replace(/[&<>"']/g, s => ({
-        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-      })[s]);
+    function exportHistory(){
+      const items = [...$('history').children].map(div => div.innerText);
+      const blob = new Blob([JSON.stringify(items, null, 2)], {type: 'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `history_${Date.now()}.json`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      toast('Exported history');
     }
 
-    // Lockdown countdown (text + progress bar)
     function startCountdown(seconds) {
-      const cd = $('cd');
-      const fill = $('progressFill');
+      const cd = $('cd'); const fill = $('progressFill');
       let remaining = seconds;
-      cd.textContent = remaining;
-      fill.style.width = '100%';
+      cd.textContent = remaining; fill.style.width = '100%';
       const iv = setInterval(() => {
-        remaining--;
-        cd.textContent = remaining;
-        const pct = Math.max(0, (remaining/seconds)*100);
-        fill.style.width = pct + '%';
+        remaining--; cd.textContent = remaining;
+        fill.style.width = Math.max(0,(remaining/seconds)*100)+'%';
         if (remaining <= 0) clearInterval(iv);
       }, 1000);
     }
 
-    function flashMsg(text){
+    function toggleShake(){
+      const el = $('lockdownScreen');
+      el.style.animation = (el.style.animation||'').includes('shake') ? el.style.animation.replace(/,?shake[^;]*/,'') : el.style.animation + ', shake 0.6s infinite';
+    }
+    (function addShake(){
+      const style = document.createElement('style');
+      style.textContent = `@keyframes shake {
+        0% { transform: translate(0,0) rotate(0deg); }
+        25% { transform: translate(2px,-1px) rotate(-0.5deg); }
+        50% { transform: translate(-2px,1px) rotate(0.7deg); }
+        75% { transform: translate(1px,-2px) rotate(-0.4deg); }
+        100% { transform: translate(0,0) rotate(0deg); }
+      }`;
+      document.head.appendChild(style);
+    })();
+
+    function toggleRain(){ rainEnabled = !rainEnabled; if (rainEnabled) kickMatrixRain(); }
+    function kickMatrixRain(){
+      const canvas = $('matrix'); const ctx =
+            function kickMatrixRain(){
+      const canvas = $('matrix');
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width = window.innerWidth;
+      const h = canvas.height = window.innerHeight;
+      const letters = '01ABCDEFGHIJKLMNOPQRSTUVWXYZ#$%&*+-<>/'.split('');
+      const fontSize = 14;
+      const columns = Math.floor(w / fontSize);
+      const drops = Array(columns).fill(1);
+
+      function draw(){
+        if (!rainEnabled) return;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
+        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#0f0';
+        ctx.font = fontSize + 'px monospace';
+        for (let i = 0; i < drops.length; i++){
+          const text = letters[Math.floor(Math.random() * letters.length)];
+          ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+          if (drops[i] * fontSize > h && Math.random() > 0.975) drops[i] = 0;
+          drops[i]++;
+        }
+        requestAnimationFrame(draw);
+      }
+      requestAnimationFrame(draw);
+    }
+
+    function entropyBits(str){
+      if (!str) return 0;
+      const freq = {};
+      for (const ch of str) freq[ch] = (freq[ch] || 0) + 1;
+      let H = 0, n = str.length;
+      for (const ch in freq){
+        const p = freq[ch] / n;
+        H += -p * Math.log2(p);
+      }
+      return H * n;
+    }
+
+    function toast(text){
       const el = document.createElement('div');
       el.textContent = text;
       el.style.position = 'fixed';
@@ -336,16 +374,50 @@
       }, 1800);
     }
 
+    function drawToyQR(text){
+      const canvas = $('qrCanvas');
+      const ctx = canvas.getContext('2d');
+      const size = canvas.width;
+      ctx.clearRect(0,0,size,size);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0,0,size,size);
+      ctx.fillStyle = '#000';
+      const seed = [...(text||'')].reduce((a,c)=> (a*33 + c.charCodeAt(0)) >>> 0, 5381);
+      const rnd = (function(s){ return ()=> (s = (s*1664525 + 1013904223) >>> 0) / 0xFFFFFFFF; })(seed);
+      const cells = 32, cell = Math.floor(size / cells);
+      for(let y=0;y<cells;y++){
+        for(let x=0;x<cells;x++){
+          if (rnd() > 0.6) ctx.fillRect(x*cell, y*cell, cell-1, cell-1);
+        }
+      }
+      ctx.fillRect(4,4,cell*5,cell*5);
+      ctx.clearRect(5,5,cell*3,cell*3);
+      ctx.fillRect(size - cell*9,4,cell*5,cell*5);
+      ctx.clearRect(size - cell*8,5,cell*3,cell*3);
+      ctx.fillRect(4,size - cell*9,cell*5,cell*5);
+      ctx.clearRect(5,size - cell*8,cell*3,cell*3);
+    }
+
     document.addEventListener('DOMContentLoaded',()=>{
       $('encodeBtn').onclick=encode;
       $('decodeBtn').onclick=decode;
       $('copyBtn').onclick=copyOutput;
       $('randomGen').onclick=randomTest;
       $('themeToggle').onclick=toggleTheme;
+      $('toggleGlitch').onclick=toggleGlitch;
+      $('scrambleBtn').onclick=scrambleOutput;
+      $('exportHistory').onclick=exportHistory;
+      $('toggleSiren').onclick=()=>{ sirenEnabled = !sirenEnabled; toast(`Siren ${sirenEnabled?'on':'off'}`); };
+      $('toggleShake').onclick=toggleShake;
+      $('toggleRain').onclick=toggleRain;
+      document.addEventListener('keydown',(e)=>{
+        if (e.key === 'Escape' && $('lockdownScreen').style.display === 'flex'){
+          toast('Override attempt logged');
+        }
+      });
       loadKey();
     });
 
-    // Auto-refresh every 2 minutes
     setInterval(() => { location.reload(); }, 120000);
   </script>
 </body>
