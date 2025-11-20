@@ -4,12 +4,13 @@
   <meta charset="utf-8" />
   <title>Encoder / Decoder</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <!-- Auto-refresh every 2 minutes -->
   <meta http-equiv="refresh" content="120">
   <style>
     body {
       font-family: system-ui, Segoe UI, Roboto, Arial, sans-serif;
-      margin: 0; padding: 0; background: #111; color: #eee;
+      margin: 0; padding: 0;
+      background: #111; color: #eee;
+      transition: background 0.5s, color 0.5s;
     }
     .container { max-width: 860px; margin: 24px auto; padding: 20px; }
     h1 { margin-bottom: 20px; }
@@ -22,8 +23,9 @@
     textarea { min-height:140px; resize:vertical }
     button {
       padding:8px 12px; border-radius:6px; border:1px solid #666;
-      background:#222; color:#eee; cursor:pointer
+      background:#222; color:#eee; cursor:pointer; transition: all 0.3s;
     }
+    button:hover { transform: scale(1.05); }
     button.primary { background:#0366d6; color:#fff; border-color:#0366d6 }
     #output {
       white-space:pre-wrap; background:#0f0f0f; padding:12px;
@@ -31,7 +33,8 @@
     }
     .channel-btn {
       padding:8px 12px; border:1px solid #666; border-radius:8px;
-      background:#222; cursor:pointer; font-weight:600; margin:4px
+      background:#222; cursor:pointer; font-weight:600; margin:4px;
+      animation: glow 2s infinite alternate;
     }
     .channel-btn.active { background:#0366d6; color:#fff; border-color:#0366d6 }
     .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center }
@@ -48,7 +51,8 @@
         #111 20px,
         #111 40px
       );
-      animation: flashbg 1s infinite;
+      background-size: 80px 80px;
+      animation: stripesMove 2s linear infinite, flashbg 1s infinite;
       text-align:center;
     }
     .lockTitle {
@@ -59,6 +63,13 @@
     }
     .lockSub { color:#fff; font-size:1.2em; margin-top:8px }
     .countdown { margin-top:12px; color:#fff }
+    #progressBar {
+      width:80%; height:20px; background:#333; border-radius:10px;
+      margin-top:10px; overflow:hidden;
+    }
+    #progressFill {
+      height:100%; background:#ff0000; width:100%; transition: width 1s linear;
+    }
     @keyframes pulse {
       0% { transform:scale(1); opacity:1; }
       50% { transform:scale(1.15); opacity:0.7; }
@@ -68,6 +79,21 @@
       0%,100% { filter:brightness(1); }
       50% { filter:brightness(0.6); }
     }
+    @keyframes stripesMove {
+      from { background-position: 0 0; }
+      to   { background-position: 80px 80px; }
+    }
+    @keyframes glow {
+      from { box-shadow: 0 0 5px #0366d6; }
+      to   { box-shadow: 0 0 20px #0366d6; }
+    }
+
+    /* Light theme */
+    body.light { background:#f9f9f9; color:#111; }
+    body.light input, body.light textarea { background:#fff; color:#111; border:1px solid #ccc; }
+    body.light #output { background:#fafafa; color:#111; border:1px solid #ddd; }
+    body.light button { background:#eee; color:#111; border:1px solid #aaa; }
+    body.light .channel-btn { background:#eee; color:#111; border:1px solid #aaa; }
   </style>
 </head>
 <body>
@@ -75,6 +101,8 @@
     <h1 class="lockTitle">🚨 SYSTEM LOCKDOWN 🚨</h1>
     <p class="lockSub">Access denied until lockdown is lifted</p>
     <div class="countdown">Refreshing in <span id="cd">120</span>s…</div>
+    <div id="progressBar"><div id="progressFill"></div></div>
+    <audio id="siren" src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg"></audio>
   </div>
 
   <div id="mainApp" class="container" style="display:none">
@@ -87,12 +115,10 @@
       <div>
         <label for="delimiter">Delimiter</label>
         <input id="delimiter" type="text" value="|" style="width:120px" />
-        <div class="muted">Use a delimiter that won't appear in your codes</div>
       </div>
-      <div>
-        <label for="normalize">Normalize whitespace</label>
-        <input id="normalize" type="checkbox" checked />
-        <div class="muted">Converts tabs/newlines to spaces for encoding</div>
+      <div class="row">
+        <button id="themeToggle">Toggle Theme</button>
+        <button id="randomGen">Random Test</button>
       </div>
     </div>
 
@@ -102,11 +128,16 @@
     <div style="margin:12px 0">
       <button id="encodeBtn">Encode</button>
       <button id="decodeBtn" class="primary">Decode</button>
+      <button id="copyBtn">Copy Output</button>
     </div>
 
     <h3>Result:</h3>
     <div id="output">Key not loaded yet.</div>
     <div id="coverage" class="muted" style="margin-top:6px"></div>
+    <div id="lengthCounter" class="muted"></div>
+
+    <h3>History:</h3>
+    <div id="history" class="muted"></div>
   </div>
 
   <script>
@@ -114,18 +145,15 @@
     const $ = id => document.getElementById(id);
     const setOut = txt => { $('output').innerText = txt; };
     const setCov = txt => { $('coverage').innerText = txt; };
+    const setLen = txt => { $('lengthCounter').innerText = txt; };
     const delim = () => ($('delimiter').value || '|');
 
-    // Encode a single character with fallback UNK token
-    function encodeChar(ch, map, prefix) {
-      if (map[ch] !== undefined) return map[ch];
-      // Optional normalization for common whitespace variants
-      if (ch === '\n' && map['\\n'] !== undefined) return map['\\n'];
-      if (ch === '\t' && map['\\t'] !== undefined) return map['\\t'];
-      // Fallback: deterministic unknown token using UTF-16 hex
-      const hex = ch.split('').map(c => c.charCodeAt(0).toString(16).padStart(2, '0')).join('');
-      return `${prefix}_UNK_${hex}`;
-    }
+    // Channel glow colors
+    const channelGlow = {
+      ch1: '#ff4d4d',
+      ch2: '#4da6ff',
+      default: '#0366d6'
+    };
 
     function renderChannelButtons(){
       const container = $('channelButtons'); container.innerHTML="";
@@ -133,12 +161,17 @@
       channels.forEach((ch,idx)=>{
         const btn=document.createElement('button');
         btn.type='button'; btn.className='channel-btn'; btn.innerText=ch;
+        // Per-channel glow color
+        const color = channelGlow[ch] || channelGlow.default;
+        btn.style.boxShadow = `0 0 10px ${color}`;
+        btn.style.borderColor = color;
+
         if(!currentChannel && idx===0) currentChannel=ch;
         if(currentChannel===ch) btn.classList.add('active');
         btn.onclick=()=>{
           [...container.children].forEach(c=>c.classList.remove('active'));
           btn.classList.add('active'); currentChannel=ch;
-          setOut("Channel selected: "+ch); setCov("");
+          setOut("Channel selected: "+ch); setCov(""); setLen("");
         };
         container.appendChild(btn);
       });
@@ -152,88 +185,163 @@
           $('mainApp').style.display='none';
           $('lockdownScreen').style.display='flex';
           startCountdown(120);
+          try { $('siren').currentTime = 0; $('siren').play(); } catch(e) {}
           return;
         }
         $('lockdownScreen').style.display='none';
         $('mainApp').style.display='block';
         renderChannelButtons();
         setOut("Key loaded. Select a channel.");
-        setCov("");
+        setCov(""); setLen("");
       }
       catch(e){ setOut("Failed to load key.json."); setCov(""); }
     }
 
     function encode(){
-      if(!currentChannel){ setOut("No channel selected."); setCov(""); return; }
-      const map=keybook[currentChannel], inputRaw=$('inputText').value||'', d=delim();
-      const prefix = currentChannel; // ch1 or ch2
-      const input = ($('normalize').checked) ? inputRaw.replace(/\r?\n|\t/g, ' ') : inputRaw;
-
-      let unknownCount = 0;
-      const out = [...input].map(ch => {
-        const token = encodeChar(ch, map, prefix);
-        if (token.startsWith(prefix + '_UNK_')) unknownCount++;
-        return token;
+      if(!currentChannel){ setOut("No channel selected."); setCov(""); setLen(""); return; }
+      const map=keybook[currentChannel], input=$('inputText').value||'', d=delim();
+      let unknownCount=0;
+      const out=[...input].map(ch=>{
+        if(map[ch]!==undefined) return map[ch];
+        // Encode unknown deterministically to avoid data loss on round-trip
+        unknownCount++; return currentChannel+"_UNK_"+ch.charCodeAt(0).toString(16).padStart(2,'0');
       }).join(d);
 
-      setOut(out || "[empty]");
-      const total = input.length;
-      const known = total - unknownCount;
-      setCov(`Coverage: ${known}/${total} known (${Math.round((known/Math.max(total,1))*100)}%). Unknowns are encoded as ${prefix}_UNK_<hex>.`);
+      setOut(out||"[empty]");
+      setCov(`Coverage: ${input.length - unknownCount}/${input.length} known`);
+      setLen(`Output tokens: ${out ? out.split(d).filter(Boolean).length : 0}`);
+      addHistory("Encoded", input, out);
     }
 
     function decode(){
-      if(!currentChannel){ setOut("No channel selected."); setCov(""); return; }
+      if(!currentChannel){ setOut("No channel selected."); setCov(""); setLen(""); return; }
       const forward=keybook[currentChannel], reverse={};
       for(const [k,v] of Object.entries(forward)) reverse[v]=k;
 
-      const tokens=($('inputText').value||'').split(delim()).filter(t => t.length > 0);
-      let unknownCount = 0;
+      const d = delim();
+      const tokens=($('inputText').value||'').split(d).filter(t => t.length > 0);
+      let unknownCount=0;
 
-      const decoded = tokens.map(t => {
-        // Recognize UNK fallback
-        const prefix = currentChannel + '_UNK_';
+      const decoded = tokens.map(t=>{
+        const prefix = currentChannel + "_UNK_";
         if (t.startsWith(prefix)) {
           const hex = t.slice(prefix.length);
-          try {
-            // Decode hex back to characters
-            if (!/^[0-9a-fA-F]+$/.test(hex)) throw new Error('bad hex');
-            let out = '';
-            for (let i = 0; i < hex.length; i += 2) {
-              out += String.fromCharCode(parseInt(hex.slice(i, i+2), 16));
-            }
-            return out;
-          } catch {
-            unknownCount++;
-            return '?';
-          }
+          const val = parseInt(hex, 16);
+          if (!Number.isNaN(val)) return String.fromCharCode(val);
+          unknownCount++; return '?';
         }
         if (reverse[t] !== undefined) return reverse[t];
-        unknownCount++;
-        return '?';
+        unknownCount++; return '?';
       }).join('');
 
       setOut(decoded || "[empty]");
-      const total = tokens.length;
-      const known = total - unknownCount;
-      setCov(`Decoded tokens: ${known}/${total} resolved (${Math.round((known/Math.max(total,1))*100)}%). Unknown tokens show as "?".`);
+      setCov(`Decoded tokens: ${tokens.length - unknownCount}/${tokens.length} resolved`);
+      setLen(`Input tokens: ${tokens.length}`);
+      addHistory("Decoded", $('inputText').value, decoded);
     }
 
-    // Lockdown countdown
+    // Copy to clipboard
+    function copyOutput(){
+      const text = $('output').innerText;
+      if (!text) return;
+      navigator.clipboard.writeText(text).then(()=>{
+        flashMsg('Copied output to clipboard');
+      }).catch(()=>{
+        flashMsg('Copy failed');
+      });
+    }
+
+    // Random test generator (letters, digits, punctuation)
+    function randomTest(){
+      const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 !@#$%^&*()-_=+[]{};:'\",./?<>";
+      let s = '';
+      const len = 32 + Math.floor(Math.random()*32);
+      for (let i=0;i<len;i++){
+        s += charset[Math.floor(Math.random()*charset.length)];
+      }
+      $('inputText').value = s;
+      flashMsg('Generated random test input');
+    }
+
+    // Theme toggle
+    function toggleTheme(){
+      document.body.classList.toggle('light');
+    }
+
+    // History with auto-scroll and entry formatting
+    function addHistory(action, input, result){
+      const h = $('history');
+      const entry = document.createElement('div');
+      entry.style.borderTop = '1px solid #333';
+      entry.style.padding = '8px 0';
+      entry.style.opacity = '0';
+      entry.style.transition = 'opacity 0.4s';
+
+      const ts = new Date().toLocaleTimeString();
+      entry.innerHTML = `<strong>${action}</strong> <span class="muted">(${ts})</span><br>
+        <span class="muted">Input:</span> ${escapeHtml(input || '')}<br>
+        <span class="muted">Result:</span> ${escapeHtml(result || '')}`;
+      h.appendChild(entry);
+      // Slide in effect via opacity
+      requestAnimationFrame(()=>{ entry.style.opacity = '1'; });
+      h.scrollTop = h.scrollHeight;
+    }
+
+    function escapeHtml(str){
+      return str.replace(/[&<>"']/g, s => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+      })[s]);
+    }
+
+    // Lockdown countdown (text + progress bar)
     function startCountdown(seconds) {
       const cd = $('cd');
+      const fill = $('progressFill');
       let remaining = seconds;
       cd.textContent = remaining;
+      fill.style.width = '100%';
       const iv = setInterval(() => {
         remaining--;
         cd.textContent = remaining;
+        const pct = Math.max(0, (remaining/seconds)*100);
+        fill.style.width = pct + '%';
         if (remaining <= 0) clearInterval(iv);
       }, 1000);
+    }
+
+    function flashMsg(text){
+      const el = document.createElement('div');
+      el.textContent = text;
+      el.style.position = 'fixed';
+      el.style.bottom = '20px';
+      el.style.right = '20px';
+      el.style.padding = '8px 12px';
+      el.style.background = '#222';
+      el.style.color = '#fff';
+      el.style.border = '1px solid #555';
+      el.style.borderRadius = '6px';
+      el.style.boxShadow = '0 4px 10px rgba(0,0,0,0.3)';
+      el.style.opacity = '0';
+      el.style.transition = 'opacity 0.3s, transform 0.3s';
+      el.style.transform = 'translateY(10px)';
+      document.body.appendChild(el);
+      requestAnimationFrame(()=>{
+        el.style.opacity = '1';
+        el.style.transform = 'translateY(0)';
+      });
+      setTimeout(()=>{
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(10px)';
+        setTimeout(()=>{ el.remove(); }, 300);
+      }, 1800);
     }
 
     document.addEventListener('DOMContentLoaded',()=>{
       $('encodeBtn').onclick=encode;
       $('decodeBtn').onclick=decode;
+      $('copyBtn').onclick=copyOutput;
+      $('randomGen').onclick=randomTest;
+      $('themeToggle').onclick=toggleTheme;
       loadKey();
     });
 
