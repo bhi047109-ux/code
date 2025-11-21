@@ -116,8 +116,7 @@
     <div class="row" style="gap:8px">
       <button id="exportHistory">Export History</button>
       <button id="toggleSiren">Toggle Siren</button>
-      <button id="toggleShake">Shake Lockdown</button>
-    </div  </div> <!-- closes #mainApp -->
+      <button id="toggleShake">Shake Lockdown</  </div> <!-- closes #mainApp -->
 
   <script>
     let keybook = {}, currentChannel = "";
@@ -169,43 +168,150 @@
       });
     }
 
-    function encode(){ /* ...full encode logic... */ }
-    function decode(){ /* ...full decode logic... */ }
-    function copyOutput(){ /* ...copy logic... */ }
-    function randomTest(){ /* ...random input logic... */ }
+    function encode(){
+      if(!currentChannel){ setOut("No channel selected."); return; }
+      const t0 = now();
+      const map=keybook[currentChannel], input=$('inputText').value||'', d=delim();
+      let unknownCount=0;
+      const out=[...input].map(ch=>{
+        if(map[ch]!==undefined) return map[ch];
+        unknownCount++; return currentChannel+"_UNK_"+ch.charCodeAt(0).toString(16).padStart(2,'0');
+      }).join(d);
+      const t1 = now();
+      setOut(out||"[empty]");
+      setCov(`Coverage: ${input.length - unknownCount}/${input.length}`);
+      setLen(`Output tokens: ${out ? out.split(d).filter(Boolean).length : 0}`);
+      setSpeed(`Encode: ${(t1 - t0).toFixed(2)} ms`);
+      setEntropy(`Input entropy: ${entropyBits(input).toFixed(2)} bits`);
+      addHistory("Encoded", input, out);
+    }
+
+    function decode(){
+      if(!currentChannel){ setOut("No channel selected."); return; }
+      const t0 = now();
+      const forward=keybook[currentChannel], reverse={};
+      for(const [k,v] of Object.entries(forward)) reverse[v]=k;
+      const d = delim();
+      const tokens=($('inputText').value||'').split(d).filter(t => t.length > 0);
+      let unknownCount=0;
+      const decoded = tokens.map(t=>{
+        const prefix = currentChannel + "_UNK_";
+        if (t.startsWith(prefix)) {
+          const hex = t.slice(prefix.length);
+          const val = parseInt(hex, 16);
+          if (!Number.isNaN(val)) return String.fromCharCode(val);
+          unknownCount++; return '?';
+        }
+        if (reverse[t] !== undefined) return reverse[t];
+        unknownCount++; return '?';
+      }).join('');
+      const t1 = now();
+      setOut(decoded || "[empty]");
+      setCov(`Decoded tokens: ${tokens.length - unknownCount}/${tokens.length}`);
+      setLen(`Input tokens: ${tokens.length}`);
+      setSpeed(`Decode: ${(t1 - t0).toFixed(2)} ms`);
+      setEntropy(`Output entropy: ${entropyBits(decoded).toFixed(2)} bits`);
+      addHistory("Decoded", $('inputText').value, decoded);
+    }
+
+    function copyOutput(){
+      const text = $('output').innerText;
+      if (!text) return;
+      navigator.clipboard.writeText(text).then(()=>toast('Copied output')).catch(()=>toast('Copy failed'));
+    }
+
+    function randomTest(){
+      const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 !@#$%^&*()-_=+[]{};:'\",./?<>";
+      let s = '';
+      const len = 36 + Math.floor(Math.random()*28);
+      for (let i=0;i<len;i++) s += charset[Math.floor(Math.random()*charset.length)];
+      $('inputText').value = s;
+      toast('Generated random input');
+    }
+
     function toggleGlitch(){ $('output').classList.toggle('glitch'); }
     function toggleTheme(){ document.body.classList.toggle('light'); }
-    function scrambleOutput(){ /* ...scramble logic... */ }
-    function addHistory(action,input,result){ /* ...history logic... */ }
-    function exportHistory(){ /* ...export logic... */ }
-    function startCountdown(seconds){ /* ...countdown logic... */ }
-    function toggleShake(){ /* ...shake logic... */ }
-    function escapeHtml(str){ /* ...escape logic... */ }
-    function entropyBits(str){ /* ...entropy logic... */ }
-    function toast(text){ /* ...toast popup logic... */ }
-    function kickMatrixRain(){ /* ...matrix rain animation... */ }
 
-    document.addEventListener('DOMContentLoaded',()=>{
-      $('encodeBtn').onclick=encode;
-      $('decodeBtn').onclick=decode;
-      $('copyBtn').onclick=copyOutput;
-      $('randomGen').onclick=randomTest;
-      $('themeToggle').onclick=toggleTheme;
-      $('toggleGlitch').onclick=toggleGlitch;
-      $('scrambleBtn').onclick=scrambleOutput;
-      $('exportHistory').onclick=exportHistory;
-      $('toggleSiren').onclick=()=>{ sirenEnabled = !sirenEnabled; toast(`Siren ${sirenEnabled?'on':'off'}`); };
-      $('toggleShake').onclick=toggleShake;
-      $('toggleRain').onclick=()=>{ rainEnabled = !rainEnabled; if (rainEnabled) kickMatrixRain(); };
-      document.addEventListener('keydown',(e)=>{
-        if (e.key === 'Escape' && $('lockdownScreen').style.display === 'flex'){
-          toast('Override attempt logged');
-        }
-      });
-      loadKey();
-    });
+    function scrambleOutput(){
+      const d = delim();
+      const out = $('output').innerText || '';
+      if (!out || !out.includes(d)) { toast('Nothing to scramble'); return; }
+      const toks = out.split(d).filter(Boolean);
+      for (let i = toks.length - 1; i > 0; i--){
+        const j = Math.floor(Math.random() * (i + 1));
+        [toks[i], toks[j]] = [toks[j], toks[i]];
+      }
+      setOut(toks.join(d));
+      toast('Scrambled tokens');
+    }
 
-    setInterval(() => { location.reload(); }, 120000);
-  </script>
-</body>
-</html>
+    function addHistory(action, input, result){
+      const h = $('history');
+      const entry = document.createElement('div');
+      entry.style.borderTop = '1px solid #333';
+      entry.style.padding = '8px 0';
+      const ts = new Date().toLocaleTimeString();
+      entry.innerHTML = `<strong>${action}</strong> <span class="muted">(${ts})</span><br>
+        <span class="muted">Input:</span> ${escapeHtml(input)}<br>
+        <span class="muted">Result:</span> ${escapeHtml(result)}`;
+      h.appendChild(entry);
+      h.scrollTop = h.scrollHeight;
+    }
+
+    function exportHistory(){
+      const items = [...$('history').children].map(div => div.innerText);
+      const blob = new Blob([JSON.stringify(items, null, 2)], {type: 'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `history_${Date.now()}.json`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      toast('Exported history');
+    }
+
+    function startCountdown(seconds){
+      const cd = $('cd'); const fill = $('progressFill');
+      let remaining = seconds;
+      cd.textContent = remaining; fill.style.width = '100%';
+      const iv = setInterval(() => {
+        remaining--;
+        cd.textContent = remaining;
+        fill.style.width = Math.max(0,(remaining/seconds)*100)+'%';
+        if (remaining <= 0) clearInterval(iv);
+      }, 1000);
+    }
+
+    function toggleShake(){
+      const el = $('lockdownScreen');
+      el.style.animation = (el.style.animation||'').includes('shake') ? el.style.animation.replace(/,?shake[^;]*/,'') : (el.style.animation + ', shake 0.6s infinite');
+    }
+
+    function escapeHtml(str){
+      if (str == null) return '';
+      return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+    }
+
+    function entropyBits(str){
+      if (!str) return 0;
+      const freq = {};
+      for (const ch of str) freq[ch] = (freq[ch] || 0) + 1;
+      let H = 0, n = str.length;
+      for (const ch in freq){
+        const p = freq[ch] / n;
+        H += -p * Math.log2(p);
+      }
+      return H * n;
+    }
+
+    function toast(text){
+      const el = document.createElement('div');
+      el.textContent = text;
+      el.style.position = 'fixed';
+      el.style.bottom = '20px';
+      el.style.right = '20px';
+      el.style.padding = '8px 12px';
+      el.style.background = '#222';
+      el.style.color = '#fff';
+      el.style.border = '1px solid #555';
+      el.style.borderRadius = '6px';
+      el.style.boxShadow = '0 4px 10px rgba(0,0,0,0.
