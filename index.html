@@ -8,16 +8,20 @@
     body {font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin: 20px; color:#111}
     label{display:block;margin-top:12px;font-weight:600}
     textarea, input[type=text], input[type=password], select {width:100%;box-sizing:border-box;padding:8px;margin-top:6px;border:1px solid #ccc;border-radius:6px}
-    button{margin-top:10px;padding:8px 12px;border-radius:6px;border:1px solid #2b6cb0;background:#3182ce;color:#fff}
-    .row {display:flex;gap:8px}
+    button{margin-top:10px;padding:8px 12px;border-radius:6px;border:1px solid #2b6cb0;background:#3182ce;color:#fff;cursor:pointer}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    .row {display:flex;gap:8px;margin-top:10px}
     .col {flex:1}
-    pre {background:#f7fafc;border:1px solid #e2e8f0;padding:10px;border-radius:6px;overflow:auto}
+    pre {background:#f7fafc;border:1px solid #e2e8f0;padding:10px;border-radius:6px;overflow:auto;min-height:48px}
     .small {font-size:13px;color:#555}
+    #lockdownBanner {background:#2b2b2b;color:#fff;padding:12px;border-radius:8px;margin:12px 0;font-weight:700;display:none}
   </style>
 </head>
 <body>
+  <div id="lockdownBanner" aria-hidden="true"></div>
+
   <h1>GroupEncoder v1 — Demo</h1>
-  <p class="small">Versioned, context-bound encoder/decoder with optional "remember" passphrase storage. This is a demo UI — for production replace MemoryStore persistence and review cryptography needs.</p>
+  <p class="small">Versioned, context-bound encoder/decoder with optional "remember" passphrase storage. Demo only — replace plaintext storage and review cryptography for production.</p>
 
   <label>Payload (string or JSON)</label>
   <textarea id="payload" rows="4">{"room":"Box Hill Lab","cable":"RJ45-A2"}</textarea>
@@ -54,364 +58,338 @@
   <label>Stored ids</label>
   <pre id="storeList">(none)</pre>
 
-  <script>
-  // ---------- Encoder implementation (browser + node compatible) ----------
-  (function (global) {
-    "use strict";
+<script>
+/* ---------- Encoder implementation (browser-compatible) ---------- */
+(function (global) {
+  "use strict";
 
-    const MAGIC = new TextEncoder().encode("GE");   // 2 bytes
-    const VERSION = 0x01;
+  const MAGIC = new TextEncoder().encode("GE");
+  const VERSION = 0x01;
+  const textEncoder = new TextEncoder();
+  const textDecoder = new TextDecoder();
 
-    const textEncoder = new TextEncoder();
-    const textDecoder = new TextDecoder();
-
-    // CRC32 table
-    const CRC_TABLE = (() => {
-      const t = new Uint32Array(256);
-      for (let i = 0; i < 256; i++) {
-        let c = i;
-        for (let j = 0; j < 8; j++) {
-          c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
-        }
-        t[i] = c >>> 0;
-      }
-      return t;
-    })();
-
-    function crc32(bytes) {
-      let c = 0xFFFFFFFF >>> 0;
-      for (let i = 0; i < bytes.length; i++) {
-        c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
-      }
-      return (c ^ 0xFFFFFFFF) >>> 0;
+  const CRC_TABLE = (() => {
+    const t = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let j = 0; j < 8; j++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[i] = c >>> 0;
     }
-
-    // Base32 Crockford (no padding)
-    const B32_ALPH = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-    const B32_MAP = (() => {
-      const m = {};
-      for (let i = 0; i < B32_ALPH.length; i++) m[B32_ALPH[i]] = i;
-      for (let i = 0; i < B32_ALPH.length; i++) m[B32_ALPH[i].toLowerCase()] = i;
-      m["O"] = m["0"]; m["o"] = m["0"];
-      m["I"] = m["1"]; m["i"] = m["1"];
-      m["L"] = m["1"]; m["l"] = m["1"];
-      return m;
-    })();
-
-    function toBase32(bytes) {
-      let bits = 0, value = 0, out = "";
-      for (let i = 0; i < bytes.length; i++) {
-        value = (value << 8) | bytes[i];
-        bits += 8;
-        while (bits >= 5) {
-          out += B32_ALPH[(value >>> (bits - 5)) & 31];
-          bits -= 5;
-        }
-      }
-      if (bits > 0) out += B32_ALPH[(value << (5 - bits)) & 31];
-      return out;
-    }
-
-    function fromBase32(str) {
-      let bits = 0, value = 0;
-      const out = [];
-      for (let i = 0; i < str.length; i++) {
-        const ch = str[i];
-        if (!(ch in B32_MAP)) throw new Error("Invalid Base32 character: " + ch);
-        value = (value << 5) | B32_MAP[ch];
-        bits += 5;
-        if (bits >= 8) {
-          out.push((value >>> (bits - 8)) & 0xFF);
-          bits -= 8;
-        }
-      }
-      return new Uint8Array(out);
-    }
-
-    function randomBytes(n) {
-      const b = new Uint8Array(n);
-      if (typeof crypto !== "undefined" && crypto.getRandomValues) {
-        crypto.getRandomValues(b);
-      } else {
-        // Node fallback (won't run in this browser demo)
-        const nodeCrypto = require("crypto");
-        const buf = nodeCrypto.randomBytes(n);
-        for (let i = 0; i < n; i++) b[i] = buf[i];
-      }
-      return b;
-    }
-
-    async function sha256(bytes) {
-      if (typeof crypto !== "undefined" && crypto.subtle) {
-        const digest = await crypto.subtle.digest("SHA-256", bytes);
-        return new Uint8Array(digest);
-      } else {
-        const nodeCrypto = require("crypto");
-        const h = nodeCrypto.createHash("sha256");
-        h.update(Buffer.from(bytes));
-        return new Uint8Array(h.digest());
-      }
-    }
-
-    function writeU32BE(v) {
-      const b = new Uint8Array(4);
-      b[0] = (v >>> 24) & 0xFF;
-      b[1] = (v >>> 16) & 0xFF;
-      b[2] = (v >>> 8) & 0xFF;
-      b[3] = v & 0xFF;
-      return b;
-    }
-
-    function writeU64BE(v) {
-      const b = new Uint8Array(8);
-      const hi = Math.floor(v / 2 ** 32) >>> 0;
-      const lo = (v >>> 0);
-      b[0] = (hi >>> 24) & 0xFF;
-      b[1] = (hi >>> 16) & 0xFF;
-      b[2] = (hi >>> 8) & 0xFF;
-      b[3] = hi & 0xFF;
-      b[4] = (lo >>> 24) & 0xFF;
-      b[5] = (lo >>> 16) & 0xFF;
-      b[6] = (lo >>> 8) & 0xFF;
-      b[7] = lo & 0xFF;
-      return b;
-    }
-
-    function xorBytes(a, b) {
-      const out = new Uint8Array(a.length);
-      for (let i = 0; i < a.length; i++) out[i] = a[i] ^ b[i % b.length];
-      return out;
-    }
-
-    async function deriveKey(passphraseBytes, contextBytes, nonce, tsMs, hintLen) {
-      const comb = concatBytes(
-        passphraseBytes,
-        contextBytes,
-        nonce,
-        writeU64BE(tsMs),
-        writeU32BE(hintLen >>> 0)
-      );
-      return await sha256(comb);
-    }
-
-    function concatBytes(...parts) {
-      const total = parts.reduce((s, p) => s + p.length, 0);
-      const out = new Uint8Array(total);
-      let offset = 0;
-      for (const p of parts) {
-        out.set(p, offset);
-        offset += p.length;
-      }
-      return out;
-    }
-
-    // Simple in-memory store (replaceable)
-    class MemoryStore {
-      constructor() { this.map = new Map(); }
-      set(id, value) { this.map.set(id, value); }
-      get(id) { return this.map.get(id); }
-      has(id) { return this.map.has(id); }
-      delete(id) { this.map.delete(id); }
-      keys() { return Array.from(this.map.keys()); }
-    }
-
-    class GroupEncoder {
-      constructor(options = {}) {
-        this.store = options.store || new MemoryStore();
-      }
-
-      remember(id, passphrase) {
-        if (!id) throw new Error("remember: id required");
-        this.store.set(id, passphrase);
-      }
-
-      forget(id) {
-        this.store.delete(id);
-      }
-
-      async encode(payload, passphraseOrId, context = "") {
-        const passphrase = this.resolvePassphrase(passphraseOrId);
-        const nonce = randomBytes(12);
-        const tsMs = Date.now();
-
-        const payloadStr = typeof payload === "string" ? payload : JSON.stringify(payload);
-        const plain = textEncoder.encode(payloadStr);
-        const passphraseBytes = textEncoder.encode(passphrase);
-        const contextBytes = textEncoder.encode(context);
-
-        const seed = await deriveKey(passphraseBytes, contextBytes, nonce, tsMs, plain.length);
-        const cipher = xorBytes(plain, seed);
-
-        const header = this.buildHeader(contextBytes, nonce, tsMs, cipher);
-        const envelope = concatBytes(header, cipher, this.buildCrc(header, cipher));
-        return toBase32(envelope);
-      }
-
-      async decode(b32, passphraseOrId, context = "") {
-        const bytes = fromBase32(b32);
-        let offset = 0;
-        if (bytes[offset++] !== MAGIC[0] || bytes[offset++] !== MAGIC[1]) {
-          throw new Error("Invalid magic");
-        }
-        const ver = bytes[offset++];
-        if (ver !== VERSION) throw new Error("Unsupported version: " + ver);
-
-        const ctxLen = bytes[offset++];
-        const ctxBytes = bytes.slice(offset, offset + ctxLen);
-        offset += ctxLen;
-
-        const nonce = bytes.slice(offset, offset + 12);
-        offset += 12;
-
-        const tsMs = readU64BE(bytes.slice(offset, offset + 8));
-        offset += 8;
-
-        const cLen = readU32BE(bytes.slice(offset, offset + 4));
-        offset += 4;
-
-        const cipher = bytes.slice(offset, offset + cLen);
-        offset += cLen;
-
-        const crcRead = readU32BE(bytes.slice(offset, offset + 4));
-
-        const contextBytes = textEncoder.encode(context);
-        if (!equalBytes(ctxBytes, contextBytes)) throw new Error("Context mismatch");
-
-        const header = this.buildHeader(ctxBytes, nonce, tsMs, cipher);
-        const crcCalc = readU32BE(this.buildCrc(header, cipher));
-        if (crcCalc !== crcRead) throw new Error("CRC32 mismatch");
-
-        const passphrase = this.resolvePassphrase(passphraseOrId);
-        const passphraseBytes = textEncoder.encode(passphrase);
-        const seed = await deriveKey(passphraseBytes, ctxBytes, nonce, tsMs, cipher.length);
-        const plain = xorBytes(cipher, seed);
-        const text = textDecoder.decode(plain);
-
-        try { return JSON.parse(text); } catch { return text; }
-      }
-
-      resolvePassphrase(passphraseOrId) {
-        if (!passphraseOrId) throw new Error("Passphrase or id required");
-        const remembered = this.store.get(passphraseOrId);
-        return remembered || passphraseOrId;
-      }
-
-      buildHeader(ctxBytes, nonce, tsMs, cipher) {
-        const ctxLen = new Uint8Array([ctxBytes.length & 0xFF]);
-        const ver = new Uint8Array([VERSION]);
-        return concatBytes(
-          MAGIC,
-          ver,
-          ctxLen,
-          ctxBytes,
-          nonce,
-          writeU64BE(tsMs),
-          writeU32BE(cipher.length >>> 0)
-        );
-      }
-
-      buildCrc(header, cipher) {
-        const crc = crc32(concatBytes(header, cipher));
-        return writeU32BE(crc);
-      }
-    }
-
-    function readU32BE(b) {
-      return ((b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3]) >>> 0;
-    }
-
-    function readU64BE(b) {
-      const hi = ((b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3]) >>> 0;
-      const lo = ((b[4] << 24) | (b[5] << 16) | (b[6] << 8) | b[7]) >>> 0;
-      return hi * 2 ** 32 + lo;
-    }
-
-    function equalBytes(a, b) {
-      if (a.length !== b.length) return false;
-      for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
-      return true;
-    }
-
-    // Export
-    const API = { GroupEncoder, MemoryStore };
-    if (typeof module !== "undefined" && module.exports) {
-      module.exports = API;
-    } else {
-      global.GroupEncoder = GroupEncoder;
-      global.MemoryStore = MemoryStore;
-    }
-
-  })(typeof globalThis !== "undefined" ? globalThis : window);
-  // ---------- End encoder implementation ----------
-
-  // ---------- Demo UI wiring ----------
-  (function () {
-    const enc = new GroupEncoder();
-    const payloadEl = document.getElementById('payload');
-    const passEl = document.getElementById('passphrase');
-    const ctxEl = document.getElementById('context');
-    const outEl = document.getElementById('output');
-    const storeList = document.getElementById('storeList');
-
-    function refreshStore() {
-      const keys = enc.store.keys();
-      storeList.textContent = keys.length ? keys.map(k => k + " → " + enc.store.get(k)).join("\n") : "(none)";
-    }
-
-    document.getElementById('rememberBtn').addEventListener('click', () => {
-      const id = passEl.value.trim();
-      const pass = prompt("Enter passphrase to remember under id: " + id, "");
-      if (!id || pass === null) return;
-      enc.remember(id, pass);
-      refreshStore();
-      outEl.textContent = "Remembered id: " + id;
-    });
-
-    document.getElementById('forgetBtn').addEventListener('click', () => {
-      const id = passEl.value.trim();
-      if (!id) return alert("Provide id to forget in the passphrase field");
-      enc.forget(id);
-      refreshStore();
-      outEl.textContent = "Forgot id: " + id;
-    });
-
-    document.getElementById('encodeBtn').addEventListener('click', async () => {
-      try {
-        const payloadText = payloadEl.value.trim();
-        let payloadVal = payloadText;
-        try { payloadVal = JSON.parse(payloadText); } catch {}
-        const token = await enc.encode(payloadVal, passEl.value.trim(), ctxEl.value.trim());
-        outEl.textContent = token;
-      } catch (e) {
-        outEl.textContent = "Encode error: " + e.message;
-      }
-    });
-
-    document.getElementById('decodeBtn').addEventListener('click', async () => {
-      try {
-        const token = outEl.textContent.trim();
-        if (!token) return alert("No token in output to decode");
-        const decoded = await enc.decode(token, passEl.value.trim(), ctxEl.value.trim());
-        outEl.textContent = typeof decoded === "string" ? decoded : JSON.stringify(decoded, null, 2);
-      } catch (e) {
-        outEl.textContent = "Decode error: " + e.message;
-      }
-    });
-
-    document.getElementById('copyOut').addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(outEl.textContent);
-        alert("Copied");
-      } catch {
-        prompt("Copy output manually:", outEl.textContent);
-      }
-    });
-
-    document.getElementById('clearOut').addEventListener('click', () => { outEl.textContent = ""; });
-
-    refreshStore();
+    return t;
   })();
-  // ---------- End UI wiring ----------
-  </script>
+
+  function crc32(bytes) {
+    let c = 0xFFFFFFFF >>> 0;
+    for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  const B32_ALPH = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+  const B32_MAP = (() => {
+    const m = {};
+    for (let i = 0; i < B32_ALPH.length; i++) m[B32_ALPH[i]] = i;
+    for (let i = 0; i < B32_ALPH.length; i++) m[B32_ALPH[i].toLowerCase()] = i;
+    m["O"] = m["0"]; m["o"] = m["0"];
+    m["I"] = m["1"]; m["i"] = m["1"];
+    m["L"] = m["1"]; m["l"] = m["1"];
+    return m;
+  })();
+
+  function toBase32(bytes) {
+    let bits = 0, value = 0, out = "";
+    for (let i = 0; i < bytes.length; i++) {
+      value = (value << 8) | bytes[i];
+      bits += 8;
+      while (bits >= 5) {
+        out += B32_ALPH[(value >>> (bits - 5)) & 31];
+        bits -= 5;
+      }
+    }
+    if (bits > 0) out += B32_ALPH[(value << (5 - bits)) & 31];
+    return out;
+  }
+
+  function fromBase32(str) {
+    let bits = 0, value = 0;
+    const out = [];
+    for (let i = 0; i < str.length; i++) {
+      const ch = str[i];
+      if (!(ch in B32_MAP)) throw new Error("Invalid Base32 character: " + ch);
+      value = (value << 5) | B32_MAP[ch];
+      bits += 5;
+      if (bits >= 8) {
+        out.push((value >>> (bits - 8)) & 0xFF);
+        bits -= 8;
+      }
+    }
+    return new Uint8Array(out);
+  }
+
+  function randomBytes(n) {
+    const b = new Uint8Array(n);
+    if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+      crypto.getRandomValues(b);
+    } else {
+      // Node not expected in this file
+      throw new Error("No secure RNG available");
+    }
+    return b;
+  }
+
+  async function sha256(bytes) {
+    if (typeof crypto !== "undefined" && crypto.subtle) {
+      const digest = await crypto.subtle.digest("SHA-256", bytes);
+      return new Uint8Array(digest);
+    }
+    throw new Error("No crypto.subtle available");
+  }
+
+  function writeU32BE(v) {
+    const b = new Uint8Array(4);
+    b[0] = (v >>> 24) & 0xFF; b[1] = (v >>> 16) & 0xFF; b[2] = (v >>> 8) & 0xFF; b[3] = v & 0xFF;
+    return b;
+  }
+
+  function writeU64BE(v) {
+    const b = new Uint8Array(8);
+    const hi = Math.floor(v / 2 ** 32) >>> 0; const lo = (v >>> 0);
+    b[0] = (hi >>> 24) & 0xFF; b[1] = (hi >>> 16) & 0xFF; b[2] = (hi >>> 8) & 0xFF; b[3] = hi & 0xFF;
+    b[4] = (lo >>> 24) & 0xFF; b[5] = (lo >>> 16) & 0xFF; b[6] = (lo >>> 8) & 0xFF; b[7] = lo & 0xFF;
+    return b;
+  }
+
+  function xorBytes(a, b) {
+    const out = new Uint8Array(a.length);
+    for (let i = 0; i < a.length; i++) out[i] = a[i] ^ b[i % b.length];
+    return out;
+  }
+
+  async function deriveKey(passphraseBytes, contextBytes, nonce, tsMs, hintLen) {
+    const comb = concatBytes(passphraseBytes, contextBytes, nonce, writeU64BE(tsMs), writeU32BE(hintLen >>> 0));
+    return await sha256(comb);
+  }
+
+  function concatBytes(...parts) {
+    const total = parts.reduce((s, p) => s + p.length, 0);
+    const out = new Uint8Array(total);
+    let offset = 0;
+    for (const p of parts) { out.set(p, offset); offset += p.length; }
+    return out;
+  }
+
+  class MemoryStore {
+    constructor() { this.map = new Map(); }
+    set(id, value) { this.map.set(id, value); }
+    get(id) { return this.map.get(id); }
+    has(id) { return this.map.has(id); }
+    delete(id) { this.map.delete(id); }
+    keys() { return Array.from(this.map.keys()); }
+  }
+
+  class GroupEncoder {
+    constructor(options = {}) { this.store = options.store || new MemoryStore(); }
+
+    remember(id, passphrase) {
+      if (!id) throw new Error("remember: id required");
+      this.store.set(id, passphrase);
+    }
+
+    forget(id) { this.store.delete(id); }
+
+    async encode(payload, passphraseOrId, context = "") {
+      const passphrase = this.resolvePassphrase(passphraseOrId);
+      const nonce = randomBytes(12);
+      const tsMs = Date.now();
+      const payloadStr = typeof payload === "string" ? payload : JSON.stringify(payload);
+      const plain = textEncoder.encode(payloadStr);
+      const passphraseBytes = textEncoder.encode(passphrase);
+      const contextBytes = textEncoder.encode(context);
+      const seed = await deriveKey(passphraseBytes, contextBytes, nonce, tsMs, plain.length);
+      const cipher = xorBytes(plain, seed);
+      const header = this.buildHeader(contextBytes, nonce, tsMs, cipher);
+      const envelope = concatBytes(header, cipher, this.buildCrc(header, cipher));
+      return toBase32(envelope);
+    }
+
+    async decode(b32, passphraseOrId, context = "") {
+      const bytes = fromBase32(b32);
+      let offset = 0;
+      if (bytes[offset++] !== MAGIC[0] || bytes[offset++] !== MAGIC[1]) throw new Error("Invalid magic");
+      const ver = bytes[offset++]; if (ver !== VERSION) throw new Error("Unsupported version: " + ver);
+      const ctxLen = bytes[offset++];
+      const ctxBytes = bytes.slice(offset, offset + ctxLen); offset += ctxLen;
+      const nonce = bytes.slice(offset, offset + 12); offset += 12;
+      const tsMs = readU64BE(bytes.slice(offset, offset + 8)); offset += 8;
+      const cLen = readU32BE(bytes.slice(offset, offset + 4)); offset += 4;
+      const cipher = bytes.slice(offset, offset + cLen); offset += cLen;
+      const crcRead = readU32BE(bytes.slice(offset, offset + 4));
+      const contextBytes = textEncoder.encode(context);
+      if (!equalBytes(ctxBytes, contextBytes)) throw new Error("Context mismatch");
+      const header = this.buildHeader(ctxBytes, nonce, tsMs, cipher);
+      const crcCalc = readU32BE(this.buildCrc(header, cipher));
+      if (crcCalc !== crcRead) throw new Error("CRC32 mismatch");
+      const passphrase = this.resolvePassphrase(passphraseOrId);
+      const passphraseBytes = textEncoder.encode(passphrase);
+      const seed = await deriveKey(passphraseBytes, ctxBytes, nonce, tsMs, cipher.length);
+      const plain = xorBytes(cipher, seed);
+      const text = textDecoder.decode(plain);
+      try { return JSON.parse(text); } catch { return text; }
+    }
+
+    resolvePassphrase(passphraseOrId) {
+      if (!passphraseOrId) throw new Error("Passphrase or id required");
+      const remembered = this.store.get(passphraseOrId);
+      return remembered || passphraseOrId;
+    }
+
+    buildHeader(ctxBytes, nonce, tsMs, cipher) {
+      const ctxLen = new Uint8Array([ctxBytes.length & 0xFF]);
+      const ver = new Uint8Array([VERSION]);
+      return concatBytes(MAGIC, ver, ctxLen, ctxBytes, nonce, writeU64BE(tsMs), writeU32BE(cipher.length >>> 0));
+    }
+
+    buildCrc(header, cipher) {
+      const crc = crc32(concatBytes(header, cipher));
+      return writeU32BE(crc);
+    }
+  }
+
+  function readU32BE(b) { return ((b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3]) >>> 0; }
+  function readU64BE(b) {
+    const hi = ((b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3]) >>> 0;
+    const lo = ((b[4] << 24) | (b[5] << 16) | (b[6] << 8) | b[7]) >>> 0;
+    return hi * 2 ** 32 + lo;
+  }
+  function equalBytes(a, b) { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; }
+
+  const API = { GroupEncoder, MemoryStore };
+  if (typeof module !== "undefined" && module.exports) module.exports = API; else global.GroupEncoder = GroupEncoder;
+
+})(typeof globalThis !== "undefined" ? globalThis : window);
+
+/* ---------- Demo UI wiring + lockdown + loader for lockdown.json ---------- */
+(function () {
+  const enc = new GroupEncoder();
+  const payloadEl = document.getElementById('payload');
+  const passEl = document.getElementById('passphrase');
+  const ctxEl = document.getElementById('context');
+  const outEl = document.getElementById('output');
+  const storeList = document.getElementById('storeList');
+  const encodeBtn = document.getElementById('encodeBtn');
+  const decodeBtn = document.getElementById('decodeBtn');
+  const rememberBtn = document.getElementById('rememberBtn');
+  const forgetBtn = document.getElementById('forgetBtn');
+  const banner = document.getElementById('lockdownBanner');
+
+  function refreshStore() {
+    const keys = enc.store.keys();
+    storeList.textContent = keys.length ? keys.map(k => k + " → " + enc.store.get(k)).join("\n") : "(none)";
+  }
+
+  // Load lockdown.json and normalize remembered entries
+  (async function loadLockdownAndStore() {
+    try {
+      const res = await fetch('lockdown.json', {cache:'no-store'});
+      if (!res.ok) { refreshStore(); return; }
+      const cfg = await res.json();
+
+      // Legacy rememberMap
+      if (cfg.rememberMap && typeof cfg.rememberMap === 'object') {
+        for (const [id, pass] of Object.entries(cfg.rememberMap)) if (pass) enc.remember(id, pass);
+      }
+
+      // New entries array
+      if (cfg.store && Array.isArray(cfg.store.entries)) {
+        for (const e of cfg.store.entries) if (e && e.id && e.passphrase) enc.remember(e.id, e.passphrase);
+      }
+
+      // If there is a top-level "store" with simple map (older variants)
+      if (cfg.store && cfg.store.map && typeof cfg.store.map === 'object') {
+        for (const [id, pass] of Object.entries(cfg.store.map)) if (pass) enc.remember(id, pass);
+      }
+
+      // If lockdown object for UI is present, apply banner & controls
+      if (cfg.active !== undefined) {
+        applyLock(cfg);
+        const refreshS = Number(cfg.refreshSeconds) > 0 ? Number(cfg.refreshSeconds) : 120;
+        setInterval(async () => {
+          try {
+            const r2 = await fetch('lockdown.json', {cache:'no-store'});
+            const cfg2 = r2.ok ? await r2.json() : null;
+            applyLock(cfg2);
+          } catch (e) { console.warn('Failed reload lockdown.json', e); }
+        }, refreshS * 1000);
+      }
+    } catch (err) {
+      console.warn('Failed to load lockdown.json', err);
+    } finally {
+      refreshStore();
+    }
+  })();
+
+  function applyLock(cfg) {
+    if (!cfg) { banner.style.display = 'none'; enableControls(true); return; }
+    const active = !!cfg.active;
+    if (active) {
+      banner.textContent = (cfg.title ? cfg.title + ' — ' : '') + (cfg.message || 'System is under lockdown');
+      banner.style.display = 'block';
+      enableControls(false);
+    } else {
+      banner.style.display = 'none';
+      enableControls(true);
+    }
+  }
+
+  function enableControls(allow) {
+    const ds = allow ? false : true;
+    [encodeBtn, decodeBtn, rememberBtn, forgetBtn].forEach(b => { if (b) b.disabled = ds; });
+    if (outEl && !allow) outEl.textContent = (outEl.textContent ? outEl.textContent + '\n\n' : '') + 'LOCKDOWN: Access disabled';
+  }
+
+  rememberBtn.addEventListener('click', () => {
+    const id = passEl.value.trim();
+    const pass = prompt("Enter passphrase to remember under id: " + id, "");
+    if (!id || pass === null) return;
+    enc.remember(id, pass);
+    refreshStore();
+    outEl.textContent = "Remembered id: " + id;
+  });
+
+  forgetBtn.addEventListener('click', () => {
+    const id = passEl.value.trim();
+    if (!id) return alert("Provide id to forget in the passphrase field");
+    enc.forget(id);
+    refreshStore();
+    outEl.textContent = "Forgot id: " + id;
+  });
+
+  document.getElementById('encodeBtn').addEventListener('click', async () => {
+    try {
+      const payloadText = payloadEl.value.trim();
+      let payloadVal = payloadText;
+      try { payloadVal = JSON.parse(payloadText); } catch {}
+      const token = await enc.encode(payloadVal, passEl.value.trim(), ctxEl.value.trim());
+      outEl.textContent = token;
+    } catch (e) { outEl.textContent = "Encode error: " + e.message; }
+  });
+
+  document.getElementById('decodeBtn').addEventListener('click', async () => {
+    try {
+      const token = outEl.textContent.trim();
+      if (!token) return alert("No token in output to decode");
+      const decoded = await enc.decode(token, passEl.value.trim(), ctxEl.value.trim());
+      outEl.textContent = typeof decoded === "string" ? decoded : JSON.stringify(decoded, null, 2);
+    } catch (e) { outEl.textContent = "Decode error: " + e.message; }
+  });
+
+  document.getElementById('copyOut').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(outEl.textContent); alert("Copied"); }
+    catch { prompt("Copy output manually:", outEl.textContent); }
+  });
+
+  document.getElementById('clearOut').addEventListener('click', () => { outEl.textContent = ""; });
+
+})();
+</script>
 </body>
 </html>
