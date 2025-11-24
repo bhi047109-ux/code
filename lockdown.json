@@ -1,0 +1,51 @@
+{
+  "version": "1.0",
+  "generatedBy": "GroupEncoder v1",
+  "generatedAt": "2025-11-24T12:37:00+11:00",
+  "rememberMap": {
+    "school": "super-secret",
+    "ict": "lab-lock-42"
+  },
+  "store": {
+    "entries": [
+      {
+        "id": "school",
+        "passphrase": "super-secret",
+        "hint": "Main school admin passphrase",
+        "createdAt": "2025-11-24T12:00:00+11:00",
+        "roles": ["admin"],
+        "notes": "Demo plaintext. Replace with hashed/encrypted storage for production."
+      },
+      {
+        "id": "ict",
+        "passphrase": "lab-lock-42",
+        "hint": "ICT room temporary key",
+        "createdAt": "2025-11-24T12:10:00+11:00",
+        "roles": ["operator"],
+        "notes": "Short-lived key for field testing."
+      }
+    ]
+  },
+  "policy": {
+    "allowedContexts": ["ICT", "RJ45-LOCKS-2025", "BoxHillLab"],
+    "maxTokenLifetimeMs": 2592000000,
+    "requireContextMatch": true,
+    "requireRememberedIdForAdminOps": true,
+    "audit": {
+      "enabled": true,
+      "events": ["encode", "decode", "remember", "forget"]
+    }
+  },
+  "lockdown": {
+    "active": false,
+    "title": "🚨 SYSTEM LOCKDOWN 🚨",
+    "message": "Access denied until lockdown is lifted",
+    "refreshSeconds": 120
+  },
+  "integrity": {
+    "format": "json",
+    "checksum": "",
+    "notes": "Populate checksum with your chosen hash of this file if you want tamper detection."
+  },
+  "deployNotes": "Supports legacy rememberMap and new store.entries. Do not store secrets in plaintext in production; use encrypted stores or keyrings."
+}
