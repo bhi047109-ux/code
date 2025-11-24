@@ -1,237 +1,619 @@
 <!doctype html>
+<!--
+  index.html — Encoder/Decoder Console (single-file)
+
+  Expected nearby files (place in same folder as this index.html on GitHub Pages or static host):
+
+  1) key.json
+     Shape: a map of channelName -> mapping object (char -> token)
+     Example:
+     {
+       "alpha": { "A":"01", "B":"02", "C":"03", " ":"00", ",":"2C" },
+       "numeric": { "0":"30", "1":"31", "2":"32", " ":"00" }
+     }
+
+     - The mapping is used for Encode: each character maps to a token string.
+     - Decode will reverse-map tokens back to characters; tokens are separated by the delimiter input.
+
+  2) lockdown.json
+     Shape:
+     {
+       "active": false,
+       "title": "🚨 SYSTEM LOCKDOWN 🚨",
+       "message": "Access denied until lockdown is lifted",
+       "refreshSeconds": 120
+     }
+
+     - If active === true the app shows a full-screen lockdown animation and blocks the UI.
+     - The page will re-fetch lockdown.json periodically according to refreshSeconds.
+
+  NOTES:
+  - This file is standalone. It uses only vanilla JS (no external libraries).
+  - For classroom use: host index.html plus key.json and lockdown.json together.
+  - For security: this is a client-side tool with mappings and secrets exposed if stored client-side.
+-->
+
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Simple Encoder — No IDs Visible</title>
+  <title>Encoder/Decoder Console</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    body{font-family:system-ui,Arial;margin:16px;color:#111}
-    h1{font-size:20px;margin:0 0 8px}
-    .hint{font-size:13px;color:#555;margin-bottom:10px}
-    label{display:block;font-weight:700;margin-top:10px}
-    textarea,input,button{width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid #ccc;margin-top:6px;font-size:15px}
-    .row{display:flex;gap:8px;margin-top:10px}
-    .row > *{flex:1}
-    button{background:#2b6cb0;color:#fff;border:none;cursor:pointer;padding:10px}
-    button:disabled{opacity:.5;cursor:not-allowed}
-    pre{background:#f7fafc;padding:10px;border-radius:8px;border:1px solid #e2e8f0;min-height:80px;overflow:auto;white-space:pre-wrap;word-break:break-word}
-    #banner{display:none;background:#b91c1c;color:#fff;padding:10px;border-radius:8px;margin-bottom:12px;font-weight:700}
+    /* ---- Theme variables ---- */
+    :root{
+      --bg: #071017;
+      --panel: linear-gradient(180deg,#071017cc,#0b1620cc);
+      --muted: #9fb4bc;
+      --fg: #e8f6f7;
+      --accent: #39d1ff;
+      --accent-2: #8a5cff;
+      --danger: #ff4d6d;
+      --glass: rgba(255,255,255,0.03);
+      --glass-2: rgba(255,255,255,0.02);
+    }
+    body.light {
+      --bg: #f6f9fb;
+      --panel: linear-gradient(180deg,#ffffff,#f2f6f9);
+      --muted: #51646f;
+      --fg: #042028;
+      --accent: #0b84ff;
+      --accent-2: #8a5cff;
+      --glass: rgba(2,6,23,0.02);
+      --glass-2: rgba(2,6,23,0.01);
+    }
+
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg),#030406);color:var(--fg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;}
+    #matrix { position:fixed; inset:0; z-index:0; pointer-events:none; opacity:0; transition:opacity .5s ease-in-out; }
+    #matrix.active { opacity:0.9; }
+
+    .container { position:relative; z-index:2; max-width:1200px; margin:20px auto; padding:18px; border-radius:12px; background:var(--panel); box-shadow: 0 8px 40px rgba(0,0,0,0.6); border:1px solid rgba(255,255,255,0.03); }
+    header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+    .title { display:flex; gap:12px; align-items:center; }
+    h1{margin:0;font-size:20px}
+    .hint { color:var(--muted); font-size:13px; }
+
+    /* start gate */
+    .startgate { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg,rgba(0,0,0,0.65),rgba(0,0,0,0.85)); z-index:10000; }
+    .gateBox { width:360px; max-width:94%; background:rgba(255,255,255,0.02); border-radius:12px; padding:18px; text-align:center; border:1px solid rgba(255,255,255,0.03); box-shadow:0 12px 40px rgba(0,0,0,0.6); }
+    .gateBox h2{margin:0;color:var(--accent);font-size:18px}
+    .gateBox p{color:var(--muted);margin:10px 0 12px}
+    .gateBox input{font-size:20px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);width:100%;text-align:center;background:transparent;color:var(--fg)}
+    .gateBox button{margin-top:12px;padding:10px 14px;border-radius:8px;border:none;background:var(--accent);color:#021217;cursor:pointer;font-weight:700}
+
+    /* lockdown full-screen */
+    .lockdown { position:fixed; inset:0; z-index:9999; display:none; align-items:center; justify-content:center; text-align:center; background: radial-gradient(circle at 30% 20%, rgba(138,92,255,0.12), rgba(0,0,0,0.9)), linear-gradient(180deg,#0b0b12,#050406); color:#fff; overflow:hidden; }
+    .lockdown.active { display:flex; }
+    .lockcard { max-width:900px; padding:26px; border-radius:12px; background:linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01)); border:1px solid rgba(255,255,255,0.04); }
+    .lockcard h2 { color:var(--accent-2); margin:0 0 6px; }
+    .lockcard p { color:#f7f7f7; margin:0 0 14px; font-size:16px; }
+    .siren { width:20px;height:20px;border-radius:50%;background:var(--danger);box-shadow:0 0 12px var(--danger),0 0 34px rgba(255,56,96,0.12); animation: pulse 1200ms infinite; display:inline-block; vertical-align:middle; margin-right:8px; }
+    @keyframes pulse { 0% { transform:scale(1); opacity:1 } 50% { transform:scale(1.4); opacity:0.7 } 100% { transform:scale(1); opacity:1 } }
+
+    /* layout */
+    .row { display:flex; gap:12px; align-items:flex-start; }
+    .col { flex:1; min-width:0; }
+    .panel { background:rgba(255,255,255,0.02); padding:12px; border-radius:10px; border:1px solid rgba(255,255,255,0.02); }
+    label { display:block; color:var(--muted); font-size:13px; margin-bottom:6px; }
+    select,input[type=text],textarea { width:100%; padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.04); background:transparent; color:var(--fg); resize:vertical; font-size:14px; box-sizing:border-box;}
+    textarea { min-height:140px; max-height:360px; }
+    .controls { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+    .btn { padding:8px 12px; border-radius:8px; border:none; background:linear-gradient(180deg,var(--accent),var(--accent-2)); color:#021217; cursor:pointer; font-weight:700; }
+    .btn.ghost { background:transparent; border:1px solid rgba(255,255,255,0.04); color:var(--fg) }
+    .btn.warn { background:linear-gradient(180deg,var(--danger),#a01f3a); color:#fff }
+    .small { font-size:13px; color:var(--muted); }
+
+    .history { max-height:320px; overflow:auto; padding:6px; display:flex; flex-direction:column; gap:8px; }
+    .hrow { display:flex; gap:8px; align-items:flex-start; background:rgba(255,255,255,0.01); padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.02); }
+    .htime { color:var(--muted); min-width:130px; font-size:12px; }
+    .htext { flex:1; font-family:monospace; font-size:13px; color:var(--fg); white-space:pre-wrap; word-break:break-word; }
+
+    .status { margin-top:12px; display:flex; gap:8px; flex-wrap:wrap; color:var(--muted); font-size:13px; }
+    .status .pill { background:rgba(255,255,255,0.02); padding:6px 8px; border-radius:8px; border:1px solid rgba(255,255,255,0.02); }
+
+    .glitch { position:relative; color:var(--accent-2); text-shadow:0 0 6px rgba(138,92,255,0.5); }
+    .glitch::after, .glitch::before { content: attr(data-text); position:absolute; left:0; top:0; width:100%; opacity:0.6; mix-blend-mode:screen; }
+    .glitch::before { color:#39d1ff; transform:translate(2px,-1px); clip-path: inset(0 0 60% 0); }
+    .glitch::after { color:#ff6fb5; transform:translate(-2px,1px); clip-path: inset(40% 0 0 0); }
+
+    @media (max-width:960px){
+      .row { flex-direction:column; }
+      header { flex-direction:column; align-items:flex-start }
+    }
+
+    button:focus, input:focus, textarea:focus, select:focus { outline: 2px solid rgba(57,209,255,0.14); outline-offset:2px; }
+
+    footer { margin-top:12px; color:var(--muted); font-size:12px; text-align:center; }
   </style>
 </head>
 <body>
-  <div id="banner" role="alert"></div>
+  <canvas id="matrix" aria-hidden="true"></canvas>
 
-  <h1>Simple Encoder</h1>
-  <div class="hint">Type a message (any length) and press Encode. To decode, paste a token into Output and press Decode. No usernames are shown on the page.</div>
-
-  <label for="context">Context (optional)</label>
-  <input id="context" placeholder="e.g., ICT or BoxHill" />
-
-  <label for="payload">Message to encode (any length)</label>
-  <textarea id="payload" rows="6" placeholder="Type your message here"></textarea>
-
-  <div class="row">
-    <button id="encodeBtn">Encode</button>
-    <button id="decodeBtn">Decode</button>
+  <!-- Lockdown overlay (controlled by lockdown.json) -->
+  <div id="lockdown" class="lockdown" role="alert" aria-hidden="true">
+    <div class="lockcard" role="document" aria-live="assertive">
+      <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:12px">
+        <div class="siren" id="sirenLight" style="display:none"></div>
+        <h2 id="lockTitle">SYSTEM LOCKDOWN</h2>
+      </div>
+      <p id="lockMessage">Access denied until lockdown is lifted</p>
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:12px">
+        <button class="btn" id="shakeLock">Shake Lockdown</button>
+        <button class="btn ghost" id="refreshLock">Refresh</button>
+      </div>
+    </div>
   </div>
 
-  <label>Output</label>
-  <pre id="output">(empty)</pre>
+  <!-- Start gate modal (requires code 1234) -->
+  <div id="startGate" class="startgate" role="dialog" aria-modal="true" aria-hidden="false">
+    <div class="gateBox" role="document" aria-label="Start gate">
+      <h2>Enter 4‑digit code to start</h2>
+      <p>Type the 4-digit code to unlock the console</p>
+      <input id="gateInput" inputmode="numeric" maxlength="4" placeholder="----" aria-label="Start code" />
+      <button id="gateOpen">Open</button>
+      <p style="margin-top:8px;color:var(--muted);font-size:13px">Start gate blocks the page until the correct code is entered.</p>
+    </div>
+  </div>
+
+  <div class="container" id="app" aria-hidden="true">
+    <header>
+      <div class="title">
+        <h1>Encoder / Decoder Console</h1>
+        <div class="hint">Static client-side tool • loads key.json & lockdown.json</div>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center">
+        <div id="profileStatus" class="small">Ready</div>
+        <button class="btn ghost" id="toggleTheme" title="Toggle theme">Theme</button>
+        <button class="btn ghost" id="toggleMatrix" title="Toggle Matrix Rain">Matrix</button>
+        <button class="btn ghost" id="toggleGlitch" title="Toggle Glitch">Glitch</button>
+        <button class="btn ghost" id="sirenToggle" title="Toggle Siren">Siren</button>
+      </div>
+    </header>
+
+    <main>
+      <div class="row">
+        <div class="col panel" style="z-index:2">
+          <label for="channelSelect">Channel</label>
+          <select id="channelSelect" aria-label="Channel selector"><option>Loading key.json...</option></select>
+
+          <label for="delimiter" style="margin-top:10px">Delimiter</label>
+          <input id="delimiter" type="text" value=" " placeholder="Delimiter between tokens" aria-label="Delimiter" />
+
+          <label for="inputArea" style="margin-top:10px">Input</label>
+          <textarea id="inputArea" placeholder="Type or paste text to encode/decode..." aria-label="Input area"></textarea>
+
+          <div class="controls" style="margin-top:8px">
+            <button class="btn" id="encodeBtn">Encode</button>
+            <button class="btn" id="decodeBtn">Decode</button>
+            <button class="btn ghost" id="copyBtn">Copy Output</button>
+            <button class="btn ghost" id="scrambleBtn">Scramble Output</button>
+            <button class="btn ghost" id="randomBtn">Random Test</button>
+            <button class="btn ghost" id="exportBtn">Export History</button>
+            <button class="btn ghost" id="shakeBtn">Shake Lockdown</button>
+          </div>
+
+          <div class="status" aria-live="polite">
+            <div class="pill">Coverage: <span id="coverage">-</span></div>
+            <div class="pill">Tokens/Len: <span id="tokens">-</span></div>
+            <div class="pill">Speed: <span id="speed">-</span></div>
+            <div class="pill">Entropy: <span id="entropy">-</span></div>
+          </div>
+        </div>
+
+        <div class="col panel" style="z-index:2;max-width:520px;min-width:260px">
+          <label>Output</label>
+          <pre id="outputBox" aria-live="polite" class="small" style="min-height:160px; white-space:pre-wrap"></pre>
+
+          <div style="margin-top:8px" class="small">History</div>
+          <div class="history" id="historyPanel" aria-live="polite"></div>
+        </div>
+      </div>
+    </main>
+
+    <footer class="small">Encoder Console • Single file app • No external libraries</footer>
+  </div>
 
 <script>
-/*
-  Simple static client-side encoder
-  - No visible names or passwords in the UI
-  - Unlimited characters supported via textarea (note: very large input will increase token size)
-  - Uses a single embedded shared passphrase kept out of the visible UI
-  - Optional lockdown via lockdown.json (place in same folder)
+/* ========= App JavaScript =========
+   - Loads key.json and lockdown.json
+   - Start gate requiring code 1234
+   - Encode/Decode with per-channel mappings
+   - Scramble, Random Test, Copy, Export History, Matrix, Glitch, Siren, Shake
+   - Profiling and entropy estimate
 */
 
-/* === CONFIG ===
-   Replace SHARED_PASSPHRASE value before publishing if you want a different secret.
-   NOTE: embedding the passphrase in this file means it's discoverable by viewing source.
-*/
-const SHARED_PASSPHRASE = "change-this-before-deploy"; // staff should change this
+/* Helpers */
+const $ = id => document.getElementById(id);
+const now = () => performance.now();
+const isoNow = () => new Date().toISOString();
 
-/* === Tiny encoding helpers === */
-const textEncoder = new TextEncoder();
-const textDecoder = new TextDecoder();
-const B32_ALPH = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-const B32_MAP = (() => { const m = {}; for (let i=0;i<B32_ALPH.length;i++){ m[B32_ALPH[i]] = i; m[B32_ALPH[i].toLowerCase()] = i; } m["O"] = m["0"]; m["I"] = m["1"]; m["L"] = m["1"]; return m; })();
-
-function toBase32(bytes){
-  let bits = 0, value = 0, out = "";
-  for (let i=0;i<bytes.length;i++){
-    value = (value << 8) | bytes[i];
-    bits += 8;
-    while (bits >= 5) { out += B32_ALPH[(value >>> (bits - 5)) & 31]; bits -= 5; }
-  }
-  if (bits > 0) out += B32_ALPH[(value << (5 - bits)) & 31];
-  return out;
+function hexOfChar(ch){
+  const u = new TextEncoder().encode(ch);
+  return Array.from(u).map(b => b.toString(16).padStart(2,'0')).join('');
 }
-
-function fromBase32(str){
-  let bits = 0, value = 0;
-  const out = [];
-  for (let i=0;i<str.length;i++){
-    const ch = str[i];
-    if (!(ch in B32_MAP)) throw new Error("Invalid Base32 character");
-    value = (value << 5) | B32_MAP[ch];
-    bits += 5;
-    if (bits >= 8) { out.push((value >>> (bits - 8)) & 0xFF); bits -= 8; }
-  }
-  return new Uint8Array(out);
-}
-
-function concat(parts){
-  let total = 0;
-  for (const p of parts) total += p.length;
-  const out = new Uint8Array(total);
-  let off = 0;
-  for (const p of parts) { out.set(p, off); off += p.length; }
-  return out;
-}
-
-function xorBytes(a, b){
-  const out = new Uint8Array(a.length);
-  for (let i=0;i<a.length;i++) out[i] = a[i] ^ b[i % b.length];
-  return out;
-}
-
-const CRC_TABLE = (() => {
-  const t = new Uint32Array(256);
-  for (let i=0;i<256;i++){
-    let c = i;
-    for (let j=0;j<8;j++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
-    t[i] = c >>> 0;
-  }
-  return t;
-})();
-
-function crc32(bytes){
-  let c = 0xFFFFFFFF >>> 0;
-  for (let i=0;i<bytes.length;i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
-  return (c ^ 0xFFFFFFFF) >>> 0;
-}
-
-function writeU32BE(v){
-  return new Uint8Array([(v >>> 24) & 0xFF, (v >>> 16) & 0xFF, (v >>> 8) & 0xFF, v & 0xFF]);
-}
-function writeU64BE(v){
-  const b = new Uint8Array(8);
-  const hi = Math.floor(v / 2 ** 32) >>> 0;
-  const lo = (v >>> 0);
-  b[0] = (hi >>> 24) & 0xFF; b[1] = (hi >>> 16) & 0xFF; b[2] = (hi >>> 8) & 0xFF; b[3] = hi & 0xFF;
-  b[4] = (lo >>> 24) & 0xFF; b[5] = (lo >>> 16) & 0xFF; b[6] = (lo >>> 8) & 0xFF; b[7] = lo & 0xFF;
-  return b;
-}
-function readU64BE(b){
-  const hi = ((b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3]) >>> 0;
-  const lo = ((b[4] << 24) | (b[5] << 16) | (b[6] << 8) | b[7]) >>> 0;
-  return hi * 2 ** 32 + lo;
-}
-function readU32BE(b){ return ((b[0]<<24)|(b[1]<<16)|(b[2]<<8)|b[3]) >>> 0; }
-
-async function sha256(bytes){
-  const d = await crypto.subtle.digest('SHA-256', bytes);
-  return new Uint8Array(d);
-}
-
-/* Envelope:
-   header = [nonce(8)][ts(8)][ctxLen(1)][ctxBytes]
-   body = cipher
-   tail = crc32(header+body)[4]
-*/
-async function encodeMessage(plainText, passphrase, context=""){
-  const plain = textEncoder.encode(plainText);
-  const nonce = crypto.getRandomValues(new Uint8Array(8));
-  const ts = Date.now();
-  const ctxBytes = textEncoder.encode(context || "");
-  const seed = await sha256(concat([textEncoder.encode(passphrase), ctxBytes, nonce, writeU64BE(ts)]));
-  const cipher = xorBytes(plain, seed);
-  const header = concat([nonce, writeU64BE(ts), new Uint8Array([ctxBytes.length]), ctxBytes]);
-  const crc = writeU32BE(crc32(concat([header, cipher])));
-  const env = concat([header, cipher, crc]);
-  return toBase32(env);
-}
-
-async function decodeMessage(token, passphrase, context=""){
-  const bytes = fromBase32(token.trim());
-  let p = 0;
-  const nonce = bytes.slice(p, p+8); p += 8;
-  const ts = readU64BE(bytes.slice(p,p+8)); p += 8;
-  const ctxLen = bytes[p++]; 
-  const ctxBytes = bytes.slice(p, p + ctxLen); p += ctxLen;
-  const cipherLen = bytes.length - p - 4;
-  const cipher = bytes.slice(p, p + cipherLen); p += cipherLen;
-  const crcRead = readU32BE(bytes.slice(p, p + 4));
-  const decodedCtx = textDecoder.decode(ctxBytes);
-  if (decodedCtx !== (context || "")) throw new Error("Context mismatch");
-  const header = concat([nonce, writeU64BE(ts), new Uint8Array([ctxLen]), ctxBytes]);
-  if (crc32(concat([header, cipher])) !== crcRead) throw new Error("CRC mismatch");
-  const seed = await sha256(concat([textEncoder.encode(passphrase), ctxBytes, nonce, writeU64BE(ts)]));
-  const plain = xorBytes(cipher, seed);
-  return textDecoder.decode(plain);
-}
-
-/* === UI wiring === */
-const ctxEl = document.getElementById('context');
-const payloadEl = document.getElementById('payload');
-const outEl = document.getElementById('output');
-const encodeBtn = document.getElementById('encodeBtn');
-const decodeBtn = document.getElementById('decodeBtn');
-const banner = document.getElementById('banner');
-
-encodeBtn.addEventListener('click', async () => {
+function charFromHex(hex){
+  if (!hex) return '';
+  const bytes = hex.match(/.{1,2}/g);
+  if (!bytes) return '?';
   try {
-    const txt = payloadEl.value;
-    if (!txt) { outEl.textContent = '(type a message first)'; return; }
-    // unlimited length allowed — but huge messages will produce huge tokens and may be slow
-    const token = await encodeMessage(txt, SHARED_PASSPHRASE, ctxEl.value.trim());
-    outEl.textContent = token;
-  } catch (e) { outEl.textContent = 'Encode error: ' + e.message; }
+    return new TextDecoder().decode(new Uint8Array(bytes.map(h => parseInt(h,16))));
+  } catch(e){
+    return '?';
+  }
+}
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]] } return a; }
+function downloadFile(filename, content, type='application/json'){ const blob=new Blob([content],{type}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }
+
+/* State */
+let KEYMAP = {};
+let LOCKCFG = { active:false, title:'', message:'', refreshSeconds:120 };
+let HISTORY = [];
+let matrixOn = false, matrixAnim = null;
+let glitchOn = false;
+let themeLight = false;
+let sirenOn = false;
+let lockdownInterval = null;
+
+/* DOM refs */
+const startGate = $('startGate');
+const gateInput = $('gateInput');
+const gateOpen = $('gateOpen');
+const app = $('app');
+const channelSelect = $('channelSelect');
+const delimiter = $('delimiter');
+const inputArea = $('inputArea');
+const encodeBtn = $('encodeBtn');
+const decodeBtn = $('decodeBtn');
+const outputBox = $('outputBox');
+const copyBtn = $('copyBtn');
+const scrambleBtn = $('scrambleBtn');
+const randomBtn = $('randomBtn');
+const exportBtn = $('exportBtn');
+const historyPanel = $('historyPanel');
+const coverage = $('coverage');
+const tokens = $('tokens');
+const speed = $('speed');
+const entropy = $('entropy');
+const toggleTheme = $('toggleTheme');
+const toggleMatrix = $('toggleMatrix');
+const toggleGlitch = $('toggleGlitch');
+const sirenToggle = $('sirenToggle');
+const shakeBtn = $('shakeBtn');
+const lockdownEl = $('lockdown');
+const lockTitle = $('lockTitle');
+const lockMessage = $('lockMessage');
+const sirenLight = $('sirenLight');
+const matrixCanvas = $('matrix');
+const shakeLock = $('shakeLock');
+const refreshLock = $('refreshLock');
+const profileStatus = $('profileStatus');
+
+/* Start gate */
+function openApp(){ startGate.style.display='none'; startGate.setAttribute('aria-hidden','true'); app.setAttribute('aria-hidden','false'); app.style.opacity=1; }
+gateOpen.addEventListener('click', () => {
+  const v = (gateInput.value||'').trim();
+  if (v === '1234') openApp(); else { gateInput.value=''; gateInput.focus(); alert('Incorrect code'); }
 });
+gateInput.addEventListener('keyup', e => { if (e.key === 'Enter') gateOpen.click(); });
 
-decodeBtn.addEventListener('click', async () => {
-  try {
-    const tok = outEl.textContent.trim();
-    if (!tok) { outEl.textContent = '(paste a token into Output to decode)'; return; }
-    const txt = await decodeMessage(tok, SHARED_PASSPHRASE, ctxEl.value.trim());
-    outEl.textContent = 'Decoded:\n' + txt;
-  } catch (e) { outEl.textContent = 'Decode error: ' + e.message; }
-});
+/* Load key.json */
+async function loadKeyJson(){
+  try{
+    const r = await fetch('key.json', {cache:'no-store'});
+    if (!r.ok) throw new Error('key.json not found');
+    KEYMAP = await r.json();
+    populateChannels();
+    profileStatus.textContent = 'Loaded key.json';
+  }catch(e){
+    KEYMAP = {};
+    channelSelect.innerHTML = '<option>(no key.json)</option>';
+    profileStatus.textContent = 'No key.json';
+    console.warn('loadKeyJson', e);
+  }
+}
+function populateChannels(){
+  channelSelect.innerHTML = '';
+  const names = Object.keys(KEYMAP).sort();
+  if (names.length === 0){ const opt=document.createElement('option'); opt.textContent='(no channels)'; channelSelect.appendChild(opt); return; }
+  for(const n of names){ const opt=document.createElement('option'); opt.value=n; opt.textContent=n; channelSelect.appendChild(opt); }
+}
 
-/* === Lockdown support ===
-   If you place lockdown.json next to this file, the page will disable controls when "active": true.
-*/
-async function loadLockdown(){
-  try {
-    const r = await fetch('lockdown.json', { cache: 'no-store' });
-    if (!r.ok) return;
+/* Load lockdown.json */
+async function loadLockdownJson(){
+  try{
+    const r = await fetch('lockdown.json', {cache:'no-store'});
+    if (!r.ok) throw new Error('lockdown.json not found');
     const cfg = await r.json();
-    const active = !!cfg.active;
-    if (active) {
-      banner.style.display = 'block';
-      banner.textContent = (cfg.title ? cfg.title + ' — ' : '') + (cfg.message || 'Locked');
-      encodeBtn.disabled = true;
-      decodeBtn.disabled = true;
-      payloadEl.disabled = true;
-      ctxEl.disabled = true;
-      outEl.textContent = 'LOCKDOWN: Access disabled';
-    } else {
-      banner.style.display = 'none';
-      encodeBtn.disabled = false;
-      decodeBtn.disabled = false;
-      payloadEl.disabled = false;
-      ctxEl.disabled = false;
-    }
-  } catch (e) {
-    // ignore fetch errors; page remains usable
+    LOCKCFG = Object.assign({active:false,title:'',message:'',refreshSeconds:120}, cfg);
+    applyLockdown();
+    if (lockdownInterval) clearInterval(lockdownInterval);
+    lockdownInterval = setInterval(loadLockdownJson, (LOCKCFG.refreshSeconds||120)*1000);
+  }catch(e){
+    LOCKCFG = {active:false,title:'',message:'',refreshSeconds:120};
+    applyLockdown();
+  }
+}
+function applyLockdown(){
+  if (LOCKCFG.active){
+    lockdownEl.classList.add('active'); lockdownEl.setAttribute('aria-hidden','false');
+    lockTitle.textContent = LOCKCFG.title || 'SYSTEM LOCKDOWN';
+    lockMessage.textContent = LOCKCFG.message || 'Access denied until lockdown is lifted';
+    app.style.filter = 'blur(3px) grayscale(.2)';
+    profileStatus.textContent = 'LOCKDOWN ACTIVE';
+    sirenOn = true; updateSiren();
+  } else {
+    lockdownEl.classList.remove('active'); lockdownEl.setAttribute('aria-hidden','true');
+    app.style.filter = '';
+    profileStatus.textContent = 'Ready';
+    sirenOn = false; updateSiren();
   }
 }
 
-loadLockdown();
+/* Encode / Decode */
+function coveragePct(channel){
+  const map = KEYMAP[channel] || {};
+  const count = Object.keys(map).length;
+  return Math.round((count/256)*100);
+}
+function encode(channel, delim, text){
+  const t0 = now();
+  const map = KEYMAP[channel] || {};
+  const tokensOut = [];
+  for(const ch of Array.from(text)){
+    if (Object.prototype.hasOwnProperty.call(map, ch)) tokensOut.push(map[ch]);
+    else tokensOut.push(`${channel}_UNK_${hexOfChar(ch)}`);
+  }
+  const out = tokensOut.join(delim);
+  const elapsed = now() - t0;
+  return { out, tokensOut, elapsed };
+}
+function decode(channel, delim, tokenText){
+  const t0 = now();
+  const map = KEYMAP[channel] || {};
+  const rev = {};
+  for(const k in map) rev[map[k]] = k;
+  const toks = tokenText.length ? tokenText.split(delim) : [];
+  const chars = [];
+  for(const tk of toks){
+    if (tk.startsWith(channel + '_UNK_')){
+      const hx = tk.substring((channel + '_UNK_').length);
+      try{ chars.push(charFromHex(hx)); } catch(e){ chars.push('?'); }
+    } else if (rev[tk] !== undefined){
+      chars.push(rev[tk]);
+    } else {
+      chars.push('?');
+    }
+  }
+  const text = chars.join('');
+  const elapsed = now() - t0;
+  return { text, toks, elapsed };
+}
+
+/* UI wiring */
+encodeBtn.addEventListener('click', async ()=>{
+  const ch = channelSelect.value;
+  const delim = delimiter.value || ' ';
+  const text = inputArea.value || '';
+  if (!ch || !KEYMAP[ch]) { alert('Choose a valid channel'); return; }
+  const t0 = now();
+  const res = encode(ch, delim, text);
+  const t1 = now() - t0;
+  outputBox.textContent = res.out;
+  coverage.textContent = coveragePct(ch) + '%';
+  tokens.textContent = `${res.tokensOut.length} / ${res.out.length}`;
+  speed.textContent = `${Math.round(t1)}ms`;
+  entropy.textContent = estimateEntropy(res.out).toFixed(2);
+  HISTORY.unshift({ ts: isoNow(), action:'encode', channel:ch, input:text, output:res.out, ms: Math.round(t1) });
+  renderHistory();
+  applyGlitch();
+});
+
+decodeBtn.addEventListener('click', async ()=>{
+  const ch = channelSelect.value;
+  const delim = delimiter.value || ' ';
+  const tokenText = outputBox.textContent || '';
+  if (!ch || !KEYMAP[ch]) { alert('Choose a valid channel'); return; }
+  const t0 = now();
+  const res = decode(ch, delim, tokenText);
+  const t1 = now() - t0;
+  inputArea.value = res.text;
+  coverage.textContent = coveragePct(ch) + '%';
+  tokens.textContent = `${res.toks.length} / ${tokenText.length}`;
+  speed.textContent = `${Math.round(t1)}ms`;
+  entropy.textContent = estimateEntropy(tokenText).toFixed(2);
+  HISTORY.unshift({ ts: isoNow(), action:'decode', channel:ch, tokens:res.toks.length, outputText:res.text, ms: Math.round(t1) });
+  renderHistory();
+  applyGlitch();
+});
+
+copyBtn.addEventListener('click', async ()=>{
+  const txt = outputBox.textContent || '';
+  if (!txt) return;
+  try {
+    await navigator.clipboard.writeText(txt);
+    profileStatus.textContent = 'Copied to clipboard';
+  } catch(e){
+    profileStatus.textContent = 'Copy failed';
+  }
+});
+
+scrambleBtn.addEventListener('click', ()=>{
+  const delim = delimiter.value || ' ';
+  const txt = outputBox.textContent || '';
+  if (!txt) return;
+  const toks = txt.split(delim);
+  const shuffled = shuffle(toks.slice()).join(delim);
+  outputBox.textContent = shuffled;
+  HISTORY.unshift({ ts: isoNow(), action:'scramble', tokens:toks.length });
+  renderHistory();
+});
+
+randomBtn.addEventListener('click', ()=>{
+  const samples = ['hello world','secret code','play time','box hill lab','RJ45-A2','the quick brown fox','lorem ipsum dolor sit amet','TEST123','😀 smile'];
+  inputArea.value = samples[Math.floor(Math.random()*samples.length)];
+});
+
+exportBtn.addEventListener('click', ()=>{
+  downloadFile(`history_${new Date().toISOString().replace(/[:.]/g,'-')}.json`, JSON.stringify(HISTORY, null, 2));
+});
+
+$('toggleTheme').addEventListener('click', ()=>{
+  themeLight = !themeLight;
+  document.body.classList.toggle('light', themeLight);
+});
+
+$('toggleGlitch').addEventListener('click', ()=>{
+  glitchOn = !glitchOn;
+  applyGlitch();
+});
+
+$('toggleMatrix').addEventListener('click', ()=>{
+  if (!matrixOn) startMatrix(); else stopMatrix();
+});
+
+$('sirenToggle').addEventListener('click', ()=>{
+  sirenOn = !sirenOn; updateSiren();
+});
+
+$('shakeBtn').addEventListener('click', doShake);
+$('shakeLock').addEventListener('click', doShake);
+$('refreshLock').addEventListener('click', loadLockdownJson);
+
+/* History render */
+function renderHistory(){
+  historyPanel.innerHTML = '';
+  for(const h of HISTORY.slice(0,200)){
+    const row = document.createElement('div'); row.className = 'hrow';
+    const t = document.createElement('div'); t.className = 'htime'; t.textContent = new Date(h.ts).toLocaleString();
+    const txt = document.createElement('div'); txt.className='htext';
+    let summary = h.action.toUpperCase();
+    if (h.channel) summary += ' • ' + h.channel;
+    if (h.input) summary += ' • ' + (h.input.length>80 ? h.input.slice(0,77)+'…' : h.input);
+    txt.textContent = summary;
+    row.appendChild(t); row.appendChild(txt); historyPanel.appendChild(row);
+  }
+}
+
+/* Glitch effect */
+function applyGlitch(){
+  if (glitchOn){
+    outputBox.classList.add('glitch'); outputBox.setAttribute('data-text', outputBox.textContent);
+    outputBox.animate([{opacity:1},{opacity:0.7},{opacity:1}], {duration:400, iterations:1});
+  } else {
+    outputBox.classList.remove('glitch'); outputBox.removeAttribute('data-text');
+  }
+}
+
+/* Siren sound and light */
+function updateSiren(){
+  if (sirenOn){
+    sirenLight.style.display = 'inline-block';
+    trySiren(true);
+  } else {
+    sirenLight.style.display = 'none';
+    trySiren(false);
+  }
+}
+let audioCtx = null, osc = null, oscTimer = null;
+function trySiren(on){
+  try{
+    if (!on){ if (osc){ try{ osc.stop(); }catch(e){} osc=null; } return; }
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    audioCtx = audioCtx || new AudioCtx();
+    osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    gain.gain.value = 0.02;
+    osc.type = 'sine';
+    osc.frequency.value = 600;
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start();
+    oscTimer = setInterval(()=>{
+      if (!osc) return;
+      const f = 600 + 220*Math.sin(Date.now()/200);
+      try{ osc.frequency.setValueAtTime(f, audioCtx.currentTime); }catch(e){}
+    }, 80);
+    setTimeout(()=>{ try{ if (osc) osc.stop(); osc=null; clearInterval(oscTimer); }catch(e){} }, 10000);
+  }catch(e){}
+}
+
+/* Shake UI */
+function doShake(){
+  const el = document.querySelector('.container');
+  el.animate([
+    { transform: 'translateX(0) rotate(0)' },
+    { transform: 'translateX(-10px) rotate(-1deg)' },
+    { transform: 'translateX(10px) rotate(1deg)' },
+    { transform: 'translateX(-8px) rotate(-1deg)' },
+    { transform: 'translateX(8px) rotate(1deg)' },
+    { transform: 'translateX(0) rotate(0)' }
+  ], { duration: 700, easing: 'ease-in-out' });
+}
+
+/* Matrix rain background */
+const MC = matrixCanvas;
+let matCtx=null, cols=0, fontSize=16, drops=[];
+function startMatrix(){
+  MC.classList.add('active'); matrixOn=true;
+  MC.width = window.innerWidth; MC.height = window.innerHeight;
+  matCtx = MC.getContext('2d');
+  fontSize = 16;
+  cols = Math.floor(MC.width / fontSize);
+  drops = Array.from({length:cols}, ()=>1);
+  function draw(){
+    if (!matrixOn) return;
+    matCtx.fillStyle = 'rgba(0,0,0,0.12)';
+    matCtx.fillRect(0,0,MC.width,MC.height);
+    matCtx.font = fontSize + 'px monospace';
+    for(let i=0;i<cols;i++){
+      const text = String.fromCharCode(33 + Math.random()*94);
+      matCtx.fillStyle = `rgba(57,255,140,${0.2 + Math.random()*0.8})`;
+      matCtx.fillText(text, i*fontSize, drops[i]*fontSize);
+      if (drops[i]*fontSize > MC.height && Math.random() > 0.975) drops[i]=0;
+      drops[i]++;
+    }
+    matrixAnim = requestAnimationFrame(draw);
+  }
+  draw();
+}
+function stopMatrix(){
+  MC.classList.remove('active'); matrixOn=false;
+  if (matrixAnim) cancelAnimationFrame(matrixAnim);
+  if (matCtx) matCtx.clearRect(0,0,MC.width,MC.height);
+}
+
+/* Simple entropy estimate */
+function estimateEntropy(s){
+  if (!s) return 0;
+  const freq = {};
+  for(const c of s) freq[c] = (freq[c]||0)+1;
+  let H = 0; const L = s.length;
+  for(const k in freq){ const p = freq[k]/L; H -= p * Math.log2(p); }
+  return H;
+}
+
+/* Initialization */
+async function init(){
+  app.setAttribute('aria-hidden','true');
+  app.style.opacity = 0;
+  await loadKeyJson();
+  await loadLockdownJson();
+  delimiter.value = delimiter.value || ' ';
+  channelSelect.addEventListener('change', ()=> profileStatus.textContent = `Channel: ${channelSelect.value}`);
+  window.addEventListener('resize', ()=> { if (matrixOn){ MC.width = window.innerWidth; MC.height = window.innerHeight; } });
+}
+init();
+
+/* Keyboard: Enter on start gate opens */
+gateInput.addEventListener('input', () => { gateInput.value = gateInput.value.replace(/[^\d]/g,'').slice(0,4); });
+setTimeout(()=> gateInput.focus(), 200);
+
+/* Toggle lockdown with Ctrl+Shift+L for testing */
+document.addEventListener('keydown', (e)=>{
+  if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'l'){ LOCKCFG.active = !LOCKCFG.active; applyLockdown(); }
+});
 
 </script>
 </body>
 </html>
+
