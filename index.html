@@ -2,226 +2,234 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Simple Encoder (GitHub Pages)</title>
+  <title>Simple Encoder — No IDs Visible</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    body{font-family:system-ui,Arial;margin:18px;color:#111}
-    h1{font-size:18px;margin:0 0 8px}
-    .small{font-size:13px;color:#555;margin-bottom:8px}
+    body{font-family:system-ui,Arial;margin:16px;color:#111}
+    h1{font-size:20px;margin:0 0 8px}
+    .hint{font-size:13px;color:#555;margin-bottom:10px}
     label{display:block;font-weight:700;margin-top:10px}
-    input,select,button,textarea{width:100%;box-sizing:border-box;padding:8px;border-radius:8px;border:1px solid #ccc;margin-top:6px}
+    textarea,input,button{width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid #ccc;margin-top:6px;font-size:15px}
     .row{display:flex;gap:8px;margin-top:10px}
     .row > *{flex:1}
-    button{background:#2b6cb0;color:#fff;border:none;cursor:pointer;padding:10px 12px}
+    button{background:#2b6cb0;color:#fff;border:none;cursor:pointer;padding:10px}
     button:disabled{opacity:.5;cursor:not-allowed}
-    pre{background:#f7fafc;padding:10px;border-radius:8px;border:1px solid #e2e8f0;min-height:60px;overflow:auto}
+    pre{background:#f7fafc;padding:10px;border-radius:8px;border:1px solid #e2e8f0;min-height:80px;overflow:auto;white-space:pre-wrap;word-break:break-word}
     #banner{display:none;background:#b91c1c;color:#fff;padding:10px;border-radius:8px;margin-bottom:12px;font-weight:700}
   </style>
 </head>
 <body>
   <div id="banner" role="alert"></div>
+
   <h1>Simple Encoder</h1>
-  <div class="small">Static page for quick encode/decode. Pick your name, enter your password, type a short message (max 32 chars), then Encode or Decode.</div>
-
-  <label for="user">Who are you?</label>
-  <select id="user" aria-label="User">
-    <option value="">-- choose name --</option>
-    <option value="jai">Jai</option>
-    <option value="tanis">Tanis</option>
-    <option value="xander">Xander</option>
-    <option value="declan">Declan</option>
-  </select>
-
-  <label for="pwd">Password</label>
-  <input id="pwd" type="password" autocomplete="off" placeholder="Enter your password" />
+  <div class="hint">Type a message (any length) and press Encode. To decode, paste a token into Output and press Decode. No usernames are shown on the page.</div>
 
   <label for="context">Context (optional)</label>
-  <input id="context" placeholder="e.g. ICT or BoxHill" />
+  <input id="context" placeholder="e.g., ICT or BoxHill" />
 
-  <label for="payload">Message to encode (or leave blank and paste a token into Output to decode)</label>
-  <input id="payload" maxlength="32" placeholder="Short message (max 32 chars)" />
-
-  <div class="row">
-    <button id="unlockBtn">Unlock</button>
-    <button id="lockBtn" disabled>Lock</button>
-  </div>
+  <label for="payload">Message to encode (any length)</label>
+  <textarea id="payload" rows="6" placeholder="Type your message here"></textarea>
 
   <div class="row">
-    <button id="encodeBtn" disabled>Encode</button>
-    <button id="decodeBtn" disabled>Decode</button>
+    <button id="encodeBtn">Encode</button>
+    <button id="decodeBtn">Decode</button>
   </div>
 
   <label>Output</label>
   <pre id="output">(empty)</pre>
 
 <script>
-/* ========= Simple static app =========
-   - Single-file; stores simple credentials in-page (for quick classroom use).
-   - Intended for use on GitHub Pages or other static hosting.
-   - Lockdown is read from /lockdown.json in same folder. If lockdown.active=true,
-     the UI will be disabled and the banner shown.
+/*
+  Simple static client-side encoder
+  - No visible names or passwords in the UI
+  - Unlimited characters supported via textarea (note: very large input will increase token size)
+  - Uses a single embedded shared passphrase kept out of the visible UI
+  - Optional lockdown via lockdown.json (place in same folder)
 */
 
-// Simple user -> password map (short and easy). Change these before publishing if needed.
-const USERS = {
-  jai: "jai",
-  tanis: "tanis",
-  xander: "xander",
-  declan: "declan"
-};
+/* === CONFIG ===
+   Replace SHARED_PASSPHRASE value before publishing if you want a different secret.
+   NOTE: embedding the passphrase in this file means it's discoverable by viewing source.
+*/
+const SHARED_PASSPHRASE = "change-this-before-deploy"; // staff should change this
 
-// DOM
-const userEl = document.getElementById('user');
-const pwdEl = document.getElementById('pwd');
-const ctxEl = document.getElementById('context');
-const payloadEl = document.getElementById('payload');
-const unlockBtn = document.getElementById('unlockBtn');
-const lockBtn = document.getElementById('lockBtn');
-const encodeBtn = document.getElementById('encodeBtn');
-const decodeBtn = document.getElementById('decodeBtn');
-const outEl = document.getElementById('output');
-const banner = document.getElementById('banner');
-
-let unlocked = false; // session unlocked flag
-let sharedPass = null; // passphrase used after unlock
-
-// --- tiny crypto helpers (light envelope) ---
+/* === Tiny encoding helpers === */
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 const B32_ALPH = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-const B32_MAP = (() => { const m = {}; for (let i=0;i<B32_ALPH.length;i++){ m[B32_ALPH[i]] = i; m[B32_ALPH[i].toLowerCase()] = i;} m["O"]=m["0"]; m["I"]=m["1"]; m["L"]=m["1"]; return m; })();
-function toBase32(bytes){ let bits=0,v=0,out=""; for(let i=0;i<bytes.length;i++){v=(v<<8)|bytes[i];bits+=8; while(bits>=5){out+=B32_ALPH[(v>>>(bits-5))&31];bits-=5;}} if(bits>0) out+=B32_ALPH[(v<<(5-bits))&31]; return out; }
-function fromBase32(s){ let bits=0,v=0;const out=[]; for(let i=0;i<s.length;i++){const ch=s[i]; if(!(ch in B32_MAP)) throw new Error("Invalid char"); v=(v<<5)|B32_MAP[ch]; bits+=5; if(bits>=8){ out.push((v>>>(bits-8))&255); bits-=8; }} return new Uint8Array(out); }
-function concat(parts){ let l=0; for(const p of parts) l+=p.length; const o=new Uint8Array(l); let off=0; for(const p of parts){ o.set(p,off); off += p.length; } return o; }
-function xor(a,b){ const o=new Uint8Array(a.length); for(let i=0;i<a.length;i++) o[i]=a[i] ^ b[i % b.length]; return o; }
-const CRC_TABLE = (()=>{ const t=new Uint32Array(256); for(let i=0;i<256;i++){ let c=i; for(let j=0;j<8;j++) c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1); t[i]=c>>>0;} return t; })();
-function crc32(bytes){ let c=0xFFFFFFFF>>>0; for(let i=0;i<bytes.length;i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
-function writeU32BE(v){ return new Uint8Array([(v>>>24)&255,(v>>>16)&255,(v>>>8)&255,v&255]); }
-function writeU64BE(v){ const hi=Math.floor(v/2**32)>>>0, lo=(v>>>0); return new Uint8Array([(hi>>>24)&255,(hi>>>16)&255,(hi>>>8)&255,hi&255,(lo>>>24)&255,(lo>>>16)&255,(lo>>>8)&255,lo&255]); }
-function readU64BE(b){ const hi=((b[0]<<24)|(b[1]<<16)|(b[2]<<8)|b[3])>>>0; const lo=((b[4]<<24)|(b[5]<<16)|(b[6]<<8)|b[7])>>>0; return hi*2**32 + lo; }
-function readU32BE(b){ return ((b[0]<<24)|(b[1]<<16)|(b[2]<<8)|b[3])>>>0; }
-async function sha256(bytes){ const d = await crypto.subtle.digest('SHA-256', bytes); return new Uint8Array(d); }
+const B32_MAP = (() => { const m = {}; for (let i=0;i<B32_ALPH.length;i++){ m[B32_ALPH[i]] = i; m[B32_ALPH[i].toLowerCase()] = i; } m["O"] = m["0"]; m["I"] = m["1"]; m["L"] = m["1"]; return m; })();
 
-// envelope encode/decode (small and deterministic)
-async function encodeToken(plainText, passphrase, context="") {
+function toBase32(bytes){
+  let bits = 0, value = 0, out = "";
+  for (let i=0;i<bytes.length;i++){
+    value = (value << 8) | bytes[i];
+    bits += 8;
+    while (bits >= 5) { out += B32_ALPH[(value >>> (bits - 5)) & 31]; bits -= 5; }
+  }
+  if (bits > 0) out += B32_ALPH[(value << (5 - bits)) & 31];
+  return out;
+}
+
+function fromBase32(str){
+  let bits = 0, value = 0;
+  const out = [];
+  for (let i=0;i<str.length;i++){
+    const ch = str[i];
+    if (!(ch in B32_MAP)) throw new Error("Invalid Base32 character");
+    value = (value << 5) | B32_MAP[ch];
+    bits += 5;
+    if (bits >= 8) { out.push((value >>> (bits - 8)) & 0xFF); bits -= 8; }
+  }
+  return new Uint8Array(out);
+}
+
+function concat(parts){
+  let total = 0;
+  for (const p of parts) total += p.length;
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const p of parts) { out.set(p, off); off += p.length; }
+  return out;
+}
+
+function xorBytes(a, b){
+  const out = new Uint8Array(a.length);
+  for (let i=0;i<a.length;i++) out[i] = a[i] ^ b[i % b.length];
+  return out;
+}
+
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let i=0;i<256;i++){
+    let c = i;
+    for (let j=0;j<8;j++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[i] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32(bytes){
+  let c = 0xFFFFFFFF >>> 0;
+  for (let i=0;i<bytes.length;i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+function writeU32BE(v){
+  return new Uint8Array([(v >>> 24) & 0xFF, (v >>> 16) & 0xFF, (v >>> 8) & 0xFF, v & 0xFF]);
+}
+function writeU64BE(v){
+  const b = new Uint8Array(8);
+  const hi = Math.floor(v / 2 ** 32) >>> 0;
+  const lo = (v >>> 0);
+  b[0] = (hi >>> 24) & 0xFF; b[1] = (hi >>> 16) & 0xFF; b[2] = (hi >>> 8) & 0xFF; b[3] = hi & 0xFF;
+  b[4] = (lo >>> 24) & 0xFF; b[5] = (lo >>> 16) & 0xFF; b[6] = (lo >>> 8) & 0xFF; b[7] = lo & 0xFF;
+  return b;
+}
+function readU64BE(b){
+  const hi = ((b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3]) >>> 0;
+  const lo = ((b[4] << 24) | (b[5] << 16) | (b[6] << 8) | b[7]) >>> 0;
+  return hi * 2 ** 32 + lo;
+}
+function readU32BE(b){ return ((b[0]<<24)|(b[1]<<16)|(b[2]<<8)|b[3]) >>> 0; }
+
+async function sha256(bytes){
+  const d = await crypto.subtle.digest('SHA-256', bytes);
+  return new Uint8Array(d);
+}
+
+/* Envelope:
+   header = [nonce(8)][ts(8)][ctxLen(1)][ctxBytes]
+   body = cipher
+   tail = crc32(header+body)[4]
+*/
+async function encodeMessage(plainText, passphrase, context=""){
   const plain = textEncoder.encode(plainText);
   const nonce = crypto.getRandomValues(new Uint8Array(8));
   const ts = Date.now();
   const ctxBytes = textEncoder.encode(context || "");
   const seed = await sha256(concat([textEncoder.encode(passphrase), ctxBytes, nonce, writeU64BE(ts)]));
-  const cipher = xor(plain, seed);
+  const cipher = xorBytes(plain, seed);
   const header = concat([nonce, writeU64BE(ts), new Uint8Array([ctxBytes.length]), ctxBytes]);
   const crc = writeU32BE(crc32(concat([header, cipher])));
   const env = concat([header, cipher, crc]);
   return toBase32(env);
 }
 
-async function decodeToken(token, passphrase, context="") {
+async function decodeMessage(token, passphrase, context=""){
   const bytes = fromBase32(token.trim());
   let p = 0;
-  const nonce = bytes.slice(p, p + 8); p += 8;
-  const ts = readU64BE(bytes.slice(p, p + 8)); p += 8;
+  const nonce = bytes.slice(p, p+8); p += 8;
+  const ts = readU64BE(bytes.slice(p,p+8)); p += 8;
   const ctxLen = bytes[p++]; 
   const ctxBytes = bytes.slice(p, p + ctxLen); p += ctxLen;
   const cipherLen = bytes.length - p - 4;
   const cipher = bytes.slice(p, p + cipherLen); p += cipherLen;
   const crcRead = readU32BE(bytes.slice(p, p + 4));
-  if (textDecoder.decode(ctxBytes) !== (context || "")) throw new Error("Context mismatch");
+  const decodedCtx = textDecoder.decode(ctxBytes);
+  if (decodedCtx !== (context || "")) throw new Error("Context mismatch");
   const header = concat([nonce, writeU64BE(ts), new Uint8Array([ctxLen]), ctxBytes]);
   if (crc32(concat([header, cipher])) !== crcRead) throw new Error("CRC mismatch");
   const seed = await sha256(concat([textEncoder.encode(passphrase), ctxBytes, nonce, writeU64BE(ts)]));
-  const plain = xor(cipher, seed);
+  const plain = xorBytes(cipher, seed);
   return textDecoder.decode(plain);
 }
 
-// --- UI and logic ---
-function showBanner(msg) { if(!msg){ banner.style.display='none'; banner.textContent=''; } else { banner.style.display='block'; banner.textContent = msg; } }
-function setLockedState(state){
-  unlocked = !state;
-  encodeBtn.disabled = state;
-  decodeBtn.disabled = state;
-  lockBtn.disabled = state;
-  unlockBtn.disabled = !state;
-  userEl.disabled = !state;
-  pwdEl.disabled = !state;
-  if(state) outEl.textContent = '(locked)'; 
-}
+/* === UI wiring === */
+const ctxEl = document.getElementById('context');
+const payloadEl = document.getElementById('payload');
+const outEl = document.getElementById('output');
+const encodeBtn = document.getElementById('encodeBtn');
+const decodeBtn = document.getElementById('decodeBtn');
+const banner = document.getElementById('banner');
 
-unlockBtn.addEventListener('click', ()=>{
-  const name = userEl.value;
-  const pwd = pwdEl.value;
-  if(!name){ alert('Choose your name'); return; }
-  if(!pwd){ alert('Enter password'); return; }
-  const expected = USERS[name];
-  if(!expected){ alert('Unknown user'); return; }
-  if(pwd !== expected){ alert('Password incorrect'); return; }
-  // unlocked
-  sharedPass = pwd; // use password itself as passphrase
-  setLockedState(false);
-  outEl.textContent = 'Unlocked as ' + name;
-});
-
-lockBtn.addEventListener('click', ()=>{
-  sharedPass = null;
-  pwdEl.value = '';
-  setLockedState(true);
-});
-
-// Encode
-encodeBtn.addEventListener('click', async ()=>{
-  if(!sharedPass){ alert('Unlock first'); return; }
-  const txt = payloadEl.value.trim();
-  if(!txt){ alert('Type message to encode'); return; }
-  if(txt.length > 32){ alert('Message too long (max 32 chars)'); return; }
+encodeBtn.addEventListener('click', async () => {
   try {
-    const token = await encodeToken(txt, sharedPass, ctxEl.value.trim());
+    const txt = payloadEl.value;
+    if (!txt) { outEl.textContent = '(type a message first)'; return; }
+    // unlimited length allowed — but huge messages will produce huge tokens and may be slow
+    const token = await encodeMessage(txt, SHARED_PASSPHRASE, ctxEl.value.trim());
     outEl.textContent = token;
-  } catch(e){ outEl.textContent = 'Error: ' + e.message; }
+  } catch (e) { outEl.textContent = 'Encode error: ' + e.message; }
 });
 
-// Decode
-decodeBtn.addEventListener('click', async ()=>{
-  if(!sharedPass){ alert('Unlock first'); return; }
-  const tok = outEl.textContent.trim();
-  if(!tok){ alert('Paste a token into Output to decode'); return; }
+decodeBtn.addEventListener('click', async () => {
   try {
-    const txt = await decodeToken(tok, sharedPass, ctxEl.value.trim());
-    outEl.textContent = 'Decoded: ' + txt;
-  } catch(e){ outEl.textContent = 'Decode error: ' + e.message; }
+    const tok = outEl.textContent.trim();
+    if (!tok) { outEl.textContent = '(paste a token into Output to decode)'; return; }
+    const txt = await decodeMessage(tok, SHARED_PASSPHRASE, ctxEl.value.trim());
+    outEl.textContent = 'Decoded:\n' + txt;
+  } catch (e) { outEl.textContent = 'Decode error: ' + e.message; }
 });
 
-// Lockdown: load /lockdown.json (if present)
-async function loadLockdown() {
+/* === Lockdown support ===
+   If you place lockdown.json next to this file, the page will disable controls when "active": true.
+*/
+async function loadLockdown(){
   try {
-    const r = await fetch('lockdown.json', {cache:'no-store'});
-    if(!r.ok){ setLockedState(true); return; } // default locked until unlock
+    const r = await fetch('lockdown.json', { cache: 'no-store' });
+    if (!r.ok) return;
     const cfg = await r.json();
-    // If cfg has top-level "active" boolean, use it; else fallback to false
     const active = !!cfg.active;
-    if(active){
-      showBanner((cfg.title ? cfg.title + ' — ' : '') + (cfg.message || 'Locked'));
-      // enforce lockdown: disable everything
+    if (active) {
+      banner.style.display = 'block';
+      banner.textContent = (cfg.title ? cfg.title + ' — ' : '') + (cfg.message || 'Locked');
       encodeBtn.disabled = true;
       decodeBtn.disabled = true;
-      unlockBtn.disabled = true;
-      lockBtn.disabled = true;
-      userEl.disabled = true;
-      pwdEl.disabled = true;
-      ctxEl.disabled = true;
       payloadEl.disabled = true;
+      ctxEl.disabled = true;
       outEl.textContent = 'LOCKDOWN: Access disabled';
     } else {
-      showBanner(null);
-      setLockedState(true); // start locked until user unlocks
+      banner.style.display = 'none';
+      encodeBtn.disabled = false;
+      decodeBtn.disabled = false;
+      payloadEl.disabled = false;
+      ctxEl.disabled = false;
     }
-  } catch(err) {
-    // if fetch fails (e.g., file not found), leave page usable but require unlock
-    setLockedState(true);
+  } catch (e) {
+    // ignore fetch errors; page remains usable
   }
 }
 
-// initialize
-setLockedState(true);
 loadLockdown();
 
 </script>
