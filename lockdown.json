@@ -37,7 +37,7 @@
     }
   },
   "lockdown": {
-    "active": false,
+    "active": true,
     "title": "🚨 SYSTEM LOCKDOWN 🚨",
     "message": "Access denied until lockdown is lifted",
     "refreshSeconds": 120
