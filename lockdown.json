@@ -4,16 +4,6 @@
   "message": "Access denied until lockdown is lifted. Contact admin to restore access.",
   "refreshSeconds": 30,
   "visual": {
-    "overlayStyle": "neon-glitch",
-    "sirenPulse": true,
-    "matrixBackground": true,
-    "sirenVolume": 0.9
-  },
-  "policy": {
-    "requireStartGate": true,
-    "blockUI": true,
-    "disableClipboard": false
-  },
-  "generatedAt": "2025-11-25T11:20:00+11:00",
-  "notes": "Set \"active\": true to enable lockdown. The app polls this file every refreshSeconds and applies the overlay, siren and UI block when active."
+    "sirenVolume": 0.8
+  }
 }
