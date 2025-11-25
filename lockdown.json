@@ -1,4 +1,3 @@
-// lockdown.json
 {
   "active": true,
   "title": "🚨 SYSTEM LOCKDOWN 🚨",
@@ -7,7 +6,8 @@
   "visual": {
     "overlayStyle": "neon-glitch",
     "sirenPulse": true,
-    "matrixBackground": true
+    "matrixBackground": true,
+    "sirenVolume": 0.9
   },
   "policy": {
     "requireStartGate": true,
@@ -15,5 +15,5 @@
     "disableClipboard": false
   },
   "generatedAt": "2025-11-25T11:20:00+11:00",
-  "notes": "Set \"active\": true to enable lockdown. The app will poll this file every refreshSeconds and apply the overlay, siren and UI block when active."
+  "notes": "Set \"active\": true to enable lockdown. The app polls this file every refreshSeconds and applies the overlay, siren and UI block when active."
 }
