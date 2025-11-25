@@ -1,483 +1,213 @@
 <!doctype html>
-<!--
-  index.html — Encoder/Decoder Console (single-file, fixed unknown-token decoding)
-
-  Nearby files expected (place beside index.html on your static host):
-
-  1) key.json
-     Shape: { "channelName": { "A":"01", "a":"21", " ":"00", ... }, ... }
-     Example (hardened alpha plus a simple 'noch' channel):
-     {
-       "alpha": {
-         "a":"231jdhe$","b":"b7X9","c":"c3Kq","d":"d8Lm","e":"e5Rt","f":"f2Vz","g":"g4Np","h":"h1Qw","i":"i6Yu","j":"j0Bs",
-         "k":"k9Td","l":"l3Gh","m":"m8Pf","n":"n2Xa","o":"o7Re","p":"p4Uk","q":"q1Zm","r":"r6Vc","s":"s0Ln","t":"t5Bj",
-         "u":"u3Hy","v":"v8Qp","w":"w2Ks","x":"x9Df","y":"y4Rt","z":"z1Ng",
-         "A":"A23Jd","B":"B7xK","C":"C3qL","D":"D8mP","E":"E5tR","F":"F2zV","G":"G4pN","H":"H1wQ","I":"I6uY","J":"J0sB",
-         "K":"K9dT","L":"L3hG","M":"M8fP","N":"N2aX","O":"O7eR","P":"P4kU","Q":"Q1mZ","R":"R6cV","S":"S0nL","T":"T5jB",
-         "U":"U3yH","V":"V8pQ","W":"W2sK","X":"X9fD","Y":"Y4tR","Z":"Z1gN",
-         " ":"SP-00",".":"DOT-2E",",":"COM-2C","!":"EX-21","?":"Q-3F","@":"AT-40","#":"HT-23","$":"DL-24","%":"PC-25",
-         "&":"AM-26","*":"ST-2A","(":"LP-28",")":"RP-29","-":"MN-2D","_":"US-5F",":":"CL-3A",";":"SC-3B","\"":"QT-22","'":"AP-27",
-         "/":"FS-2F","\\":"BS-5C"
-       },
-       "noch": {
-         "a":"n231j","b":"n7X9","c":"n3Kq","d":"n8Lm","e":"n5Rt","f":"n2Vz","g":"n4Np","h":"n1Qw","i":"n6Yu","j":"n0Bs",
-         "k":"n9Td","l":"n3Gh","m":"n8Pf","n":"n2Xa","o":"n7Re","p":"n4Uk","q":"n1Zm","r":"n6Vc","s":"n0Ln","t":"n5Bj",
-         "u":"n3Hy","v":"n8Qp","w":"n2Ks","x":"n9Df","y":"n4Rt","z":"n1Ng"," ":"n00"
-       }
-     }
-
-  2) lockdown.json
-     Shape: { "active": true/false, "title":"...", "message":"...", "refreshSeconds":30, "visual":{ "matrixBackground":true, "sirenVolume":0.9 } }
-     Example:
-     {
-       "active": false,
-       "title": "🚨 SYSTEM LOCKDOWN 🚨",
-       "message": "Access denied until lockdown is lifted.",
-       "refreshSeconds": 20,
-       "visual": { "matrixBackground": true, "sirenVolume": 0.9 }
-     }
-
-  Fix included:
-  - Decoder now correctly handles unknown tokens from ANY channel (e.g., "_meta_UNK_49") by decoding the hex payload, even if that channel isn't in key.json.
-  - You can paste tokens like "_meta_UNK_49 _meta_UNK_20 _meta_UNK_68 _meta_UNK_61 _meta_UNK_76" and Decode will produce "I hav" (with your delimiter).
-
-  Other notes:
-  - Start gate code is 2342.
-  - The encoder optionally prepends 5 random uppercase letters (can disable in code).
-  - Loud multi-oscillator siren; audio may require a user gesture.
--->
-
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>Encoder/Decoder Console</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <style>
-    :root{ --bg:#071017; --panel:linear-gradient(180deg,#071017cc,#0b1620cc); --muted:#9fb4bc; --fg:#e8f6f7; --accent:#39d1ff; --accent-2:#8a5cff; --danger:#ff4d6d; }
-    body.light{ --bg:#f6f9fb; --panel:linear-gradient(180deg,#ffffff,#f2f6f9); --muted:#51646f; --fg:#042028; --accent:#0b84ff; --accent-2:#8a5cff; }
-    html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg),#030406);color:var(--fg);font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
-    #matrix{ position:fixed; inset:0; z-index:0; pointer-events:none; opacity:0; transition:opacity .4s }
-    #matrix.active{ opacity:0.9 }
-
-    .container{ position:relative; z-index:2; max-width:1150px; margin:20px auto; padding:18px; border-radius:12px; background:var(--panel); box-shadow:0 8px 40px rgba(0,0,0,.6); border:1px solid rgba(255,255,255,.03) }
-    header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px }
-    h1{ margin:0; font-size:20px } .hint{ color:var(--muted); font-size:13px }
-
-    /* Start gate */
-    .startgate{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg,rgba(0,0,0,.7),rgba(0,0,0,.85)); z-index:10000 }
-    .gateBox{ width:360px; background:rgba(255,255,255,.02); padding:18px; border-radius:12px; text-align:center; border:1px solid rgba(255,255,255,.03) }
-    .gateBox input{ font-size:20px; padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,.04); width:100%; text-align:center; background:transparent; color:var(--fg) }
-    .gateBox button{ margin-top:12px; padding:10px 14px; border-radius:8px; border:none; background:var(--accent); color:#021217; cursor:pointer; font-weight:700 }
-
-    /* Lockdown overlay */
-    .lockdown{ position:fixed; inset:0; z-index:99999; display:none; align-items:center; justify-content:center; text-align:center; background:radial-gradient(circle at 30% 20%, rgba(138,92,255,.12), rgba(0,0,0,.95)); color:#fff; overflow:hidden }
-    .lockdown.active{ display:flex }
-    .lockinner{ width:100%; height:100%; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:12px; padding:24px; box-sizing:border-box }
-    .lockcard{ max-width:920px; padding:26px; border-radius:12px; background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.01)); border:1px solid rgba(255,255,255,.04) }
-    .lockcard h2{ color:var(--accent-2); margin:0 0 8px } .lockcard p{ color:#f7f7f7; margin:0 0 12px; font-size:16px }
-    .lock-siren{ width:44px; height:44px; border-radius:50%; background:var(--danger); box-shadow:0 0 22px var(--danger),0 0 60px rgba(255,56,96,.18) }
-    .lock-flash{ animation: flash 800ms infinite }
-    @keyframes flash{ 0%{transform:scale(1);opacity:1}50%{transform:scale(1.5);opacity:.5}100%{transform:scale(1);opacity:1} }
-
-    .row{ display:flex; gap:12px; align-items:flex-start }
-    .col{ flex:1; min-width:0 }
-    .panel{ background:rgba(255,255,255,.02); padding:12px; border-radius:10px; border:1px solid rgba(255,255,255,.02) }
-    label{ display:block; color:var(--muted); font-size:13px; margin-bottom:6px }
-    select,input[type=text],textarea{ width:100%; padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,.04); background:transparent; color:var(--fg); resize:vertical }
-    textarea{ min-height:140px; max-height:380px }
-    .controls{ display:flex; gap:8px; flex-wrap:wrap; margin-top:8px }
-    .btn{ padding:8px 12px; border-radius:8px; border:none; background:linear-gradient(180deg,var(--accent),var(--accent-2)); color:#021217; cursor:pointer; font-weight:700 }
-    .btn.ghost{ background:transparent; border:1px solid rgba(255,255,255,.04); color:var(--fg) }
-    .status{ margin-top:12px; display:flex; gap:8px; flex-wrap:wrap; color:var(--muted); font-size:13px }
-    .status .pill{ background:rgba(255,255,255,.02); padding:6px 8px; border-radius:8px; border:1px solid rgba(255,255,255,.02) }
-    .history{ max-height:320px; overflow:auto; padding:6px; display:flex; flex-direction:column; gap:8px }
-    .hrow{ display:flex; gap:8px; align-items:flex-start; background:rgba(255,255,255,.01); padding:8px; border-radius:8px }
-    .htime{ color:var(--muted); min-width:130px; font-size:12px }
-    .htext{ flex:1; font-family:monospace; font-size:13px; color:var(--fg); white-space:pre-wrap; word-break:break-word }
-    .glitch{ position:relative; color:var(--accent-2); text-shadow:0 0 6px rgba(138,92,255,.5) }
-    .glitch::after,.glitch::before{ content:attr(data-text); position:absolute; left:0; top:0; width:100%; opacity:.6; mix-blend-mode:screen }
-    .glitch::before{ color:#39d1ff; transform:translate(2px,-1px); clip-path:inset(0 0 60% 0) }
-    .glitch::after{ color:#ff6fb5; transform:translate(-2px,1px); clip-path:inset(40% 0 0 0) }
-
-    @media (max-width:960px){ .row{flex-direction:column} header{flex-direction:column; align-items:flex-start} }
-    button:focus, input:focus, textarea:focus, select:focus{ outline:2px solid rgba(57,209,255,.14); outline-offset:2px }
-    footer{ margin-top:12px; color:var(--muted); font-size:12px; text-align:center }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Encoder/Decoder (Lockdown Minimal)</title>
+<style>
+  :root{ --bg:#0b1220; --panel:#10192b; --fg:#eaf2ff; --muted:#99a8c2; --accent:#57d0ff; --danger:#ff4d6d; }
+  html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg),#070c17);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,Arial}
+  .container{max-width:760px;margin:24px auto;padding:16px;border-radius:12px;background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.02));border:1px solid rgba(255,255,255,.05)}
+  h1{margin:0 0 12px;font-size:20px}
+  label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+  select,input,textarea{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,.08);background:transparent;color:var(--fg)}
+  textarea{min-height:120px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .btnbar{display:flex;gap:8px;margin-top:10px}
+  .btn{padding:8px 12px;border:none;border-radius:8px;background:var(--accent);color:#03101b;font-weight:700;cursor:pointer}
+  .ghost{background:transparent;border:1px solid rgba(255,255,255,.1);color:var(--fg)}
+  .status{margin-top:10px;display:flex;gap:12px;font-size:12px;color:var(--muted)}
+  pre{min-height:120px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);padding:10px;border-radius:8px;white-space:pre-wrap}
+  /* Lockdown overlay */
+  .lockdown{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:radial-gradient(circle at 30% 20%, rgba(87,208,255,.08), rgba(0,0,0,.92));z-index:9999}
+  .lockdown.active{display:flex}
+  .lockcard{max-width:720px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:20px;color:#fff;text-align:center}
+  .siren{width:36px;height:36px;border-radius:50%;background:var(--danger);box-shadow:0 0 20px var(--danger)}
+  .pulse{animation:pulse 800ms infinite}
+  @keyframes pulse{0%{transform:scale(1);opacity:1}50%{transform:scale(1.35);opacity:.6}100%{transform:scale(1);opacity:1}}
+</style>
 </head>
 <body>
-  <canvas id="matrix" aria-hidden="true"></canvas>
-
-  <!-- Lockdown overlay -->
   <div id="lockdown" class="lockdown" aria-hidden="true" role="alert">
-    <div class="lockinner" id="lockinner">
-      <div class="lockcard" role="document" aria-live="assertive">
-        <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:12px">
-          <div id="lockSirenLight" class="lock-siren" aria-hidden="true"></div>
-          <h2 id="lockTitle">SYSTEM LOCKDOWN</h2>
-        </div>
-        <p id="lockMessage">Access denied until lockdown is lifted</p>
-        <div style="display:flex;gap:8px;justify-content:center;margin-top:12px;align-items:center;">
-          <button class="btn" id="shakeLock">Shake Lockdown</button>
-          <button class="btn ghost" id="refreshLock">Refresh</button>
-          <label style="color:#fff;display:flex;align-items:center;gap:8px;margin-left:12px">
-            <input id="sirenVol" type="range" min="0" max="1" step="0.05" value="0.9"> Volume
-          </label>
-        </div>
+    <div class="lockcard">
+      <div style="display:flex;gap:10px;justify-content:center;align-items:center;margin-bottom:8px">
+        <div id="sirenLight" class="siren"></div>
+        <h2 id="lockTitle" style="margin:0">SYSTEM LOCKDOWN</h2>
+      </div>
+      <p id="lockMessage" style="margin:0 0 12px">Access denied until lockdown is lifted</p>
+      <div style="display:flex;gap:8px;justify-content:center;align-items:center">
+        <button id="refreshLock" class="btn ghost">Refresh</button>
+        <label style="display:flex;gap:6px;align-items:center"><input id="sirenVol" type="range" min="0" max="1" step="0.05" value="0.8"> Volume</label>
       </div>
     </div>
   </div>
 
-  <!-- Start gate -->
-  <div id="startGate" class="startgate" role="dialog" aria-modal="true" aria-hidden="false">
-    <div class="gateBox" role="document" aria-label="Start gate">
-      <h2>Enter 4‑digit code to start</h2>
-      <p>Type the 4-digit code to unlock the console</p>
-      <input id="gateInput" inputmode="numeric" maxlength="4" placeholder="----" aria-label="Start code" />
-      <button id="gateOpen">Open</button>
-      <p style="margin-top:8px;color:var(--muted);font-size:13px">Start gate blocks the page until the correct code is entered (2342).</p>
+  <div class="container" id="app">
+    <h1>Encoder / Decoder</h1>
+
+    <label>Channel</label>
+    <select id="channelSelect"><option>Loading key.json…</option></select>
+
+    <label style="margin-top:10px">Delimiter</label>
+    <input id="delimiter" type="text" value=" " />
+
+    <div class="row" style="margin-top:10px">
+      <div>
+        <label>Input</label>
+        <textarea id="inputArea" placeholder="Type text to encode, or paste tokens to decode"></textarea>
+        <div class="btnbar">
+          <button id="encodeBtn" class="btn">Encode</button>
+          <button id="decodeBtn" class="btn ghost">Decode</button>
+        </div>
+      </div>
+      <div>
+        <label>Output</label>
+        <pre id="outputBox"></pre>
+        <div class="btnbar">
+          <button id="copyBtn" class="btn ghost">Copy</button>
+          <button id="shakeBtn" class="btn ghost">Shake lockdown</button>
+        </div>
+      </div>
     </div>
-  </div>
 
-  <div class="container" id="app" aria-hidden="true">
-    <header>
-      <div class="title">
-        <h1>Encoder / Decoder Console</h1>
-        <div class="hint">Loads key.json & lockdown.json • Unknown tokens decode fixed</div>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <div id="profileStatus" class="hint">Ready</div>
-        <button class="btn ghost" id="toggleTheme">Theme</button>
-        <button class="btn ghost" id="toggleMatrix">Matrix</button>
-        <button class="btn ghost" id="toggleGlitch">Glitch</button>
-        <button class="btn ghost" id="sirenToggle">Siren</button>
-      </div>
-    </header>
-
-    <main>
-      <div class="row">
-        <div class="col panel" style="z-index:2">
-          <label for="channelSelect">Channel</label>
-          <select id="channelSelect"><option>Loading key.json…</option></select>
-
-          <label for="delimiter" style="margin-top:10px">Delimiter</label>
-          <input id="delimiter" type="text" value=" " placeholder="Delimiter between tokens" />
-
-          <label for="inputArea" style="margin-top:10px">Input</label>
-          <textarea id="inputArea" placeholder="Type or paste text to encode/decode..."></textarea>
-
-          <div class="controls">
-            <button class="btn" id="encodeBtn">Encode</button>
-            <button class="btn" id="decodeBtn">Decode</button>
-            <button class="btn ghost" id="copyBtn">Copy Output</button>
-            <button class="btn ghost" id="scrambleBtn">Scramble Output</button>
-            <button class="btn ghost" id="randomBtn">Random Test</button>
-            <button class="btn ghost" id="exportBtn">Export History</button>
-            <button class="btn ghost" id="shakeBtn">Shake Lockdown</button>
-          </div>
-
-          <div class="status" aria-live="polite">
-            <div class="pill">Coverage: <span id="coverage">-</span></div>
-            <div class="pill">Tokens/Len: <span id="tokens">-</span></div>
-            <div class="pill">Speed: <span id="speed">-</span></div>
-            <div class="pill">Entropy: <span id="entropy">-</span></div>
-          </div>
-        </div>
-
-        <div class="col panel" style="z-index:2;max-width:520px;min-width:260px">
-          <label>Output</label>
-          <pre id="outputBox" style="min-height:160px;white-space:pre-wrap"></pre>
-
-          <div style="margin-top:8px" class="hint">History</div>
-          <div class="history" id="historyPanel"></div>
-        </div>
-      </div>
-    </main>
-
-    <footer class="hint">Single-file app • No external libs • Start gate: 2342</footer>
+    <div class="status">
+      <div>Coverage: <span id="coverage">-</span></div>
+      <div>Tokens/Len: <span id="tokens">-</span></div>
+      <div>Speed: <span id="speed">-</span></div>
+      <div>Entropy: <span id="entropy">-</span></div>
+    </div>
   </div>
 
 <script>
-/* ===== Utilities ===== */
+/* Minimal logic: load key.json + lockdown.json, encode/decode with UNK fallback, lockdown overlay + siren */
+
+/* Helpers */
 const $ = id => document.getElementById(id);
 const now = () => performance.now();
-const isoNow = () => new Date().toISOString();
+function hexOfChar(ch){ const u=new TextEncoder().encode(ch); return Array.from(u).map(b=>b.toString(16).padStart(2,'0')).join(''); }
+function charFromHex(hex){ const bytes=hex.match(/.{1,2}/g); if(!bytes) return ''; try{ return new TextDecoder().decode(new Uint8Array(bytes.map(h=>parseInt(h,16)))); }catch(e){ return '?'; } }
+function entropy(s){ if(!s) return 0; const f={}; for(const c of s) f[c]=(f[c]||0)+1; let H=0; const L=s.length; for(const k in f){ const p=f[k]/L; H -= p*Math.log2(p);} return H; }
 
-function hexOfChar(ch){
-  const u = new TextEncoder().encode(ch);
-  return Array.from(u).map(b => b.toString(16).padStart(2,'0')).join('');
-}
-function charFromHex(hex){
-  const bytes = hex.match(/.{1,2}/g);
-  if (!bytes) return '';
-  try { return new TextDecoder().decode(new Uint8Array(bytes.map(h=>parseInt(h,16)))); } catch(e){ return '?'; }
-}
-function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]] } return a; }
-function downloadFile(filename, content, type='application/json'){ const blob=new Blob([content],{type}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }
+/* State */
+let KEYMAP = {};
+let LOCKCFG = { active:false, title:'', message:'', refreshSeconds:30, visual:{sirenVolume:0.8} };
+let siren = { ctx:null, gain:null, oscs:[], mod:null };
 
-/* ===== Embedded defaults (used if external files missing) ===== */
-const EMBEDDED_KEY_JSON = {
-  "alpha": {
-    "a":"231jdhe$","b":"b7X9","c":"c3Kq","d":"d8Lm","e":"e5Rt","f":"f2Vz","g":"g4Np","h":"h1Qw","i":"i6Yu","j":"j0Bs",
-    "k":"k9Td","l":"l3Gh","m":"m8Pf","n":"n2Xa","o":"o7Re","p":"p4Uk","q":"q1Zm","r":"r6Vc","s":"s0Ln","t":"t5Bj",
-    "u":"u3Hy","v":"v8Qp","w":"w2Ks","x":"x9Df","y":"y4Rt","z":"z1Ng",
-    "A":"A23Jd","B":"B7xK","C":"C3qL","D":"D8mP","E":"E5tR","F":"F2zV","G":"G4pN","H":"H1wQ","I":"I6uY","J":"J0sB",
-    "K":"K9dT","L":"L3hG","M":"M8fP","N":"N2aX","O":"O7eR","P":"P4kU","Q":"Q1mZ","R":"R6cV","S":"S0nL","T":"T5jB",
-    "U":"U3yH","V":"V8pQ","W":"W2sK","X":"X9fD","Y":"Y4tR","Z":"Z1gN",
-    " ":"SP-00",".":"DOT-2E",",":"COM-2C","!":"EX-21","?":"Q-3F","@":"AT-40","#":"HT-23","$":"DL-24","%":"PC-25",
-    "&":"AM-26","*":"ST-2A","(":"LP-28",")":"RP-29","-":"MN-2D","_":"US-5F",":":"CL-3A",";":"SC-3B","\"":"QT-22","'":"AP-27",
-    "/":"FS-2F","\\":"BS-5C"
-  },
-  "noch": {
-    "a":"n231j","b":"n7X9","c":"n3Kq","d":"n8Lm","e":"n5Rt","f":"n2Vz","g":"n4Np","h":"n1Qw","i":"n6Yu","j":"n0Bs",
-    "k":"n9Td","l":"n3Gh","m":"n8Pf","n":"n2Xa","o":"n7Re","p":"n4Uk","q":"n1Zm","r":"n6Vc","s":"n0Ln","t":"n5Bj",
-    "u":"n3Hy","v":"n8Qp","w":"n2Ks","x":"n9Df","y":"n4Rt","z":"n1Ng"," ":"n00"
-  }
-};
-const EMBEDDED_LOCKDOWN_JSON = {
-  "active": false,
-  "title": "🚨 SYSTEM LOCKDOWN 🚨",
-  "message": "Access denied until lockdown is lifted.",
-  "refreshSeconds": 20,
-  "visual": { "matrixBackground": true, "sirenVolume": 0.9 }
-};
-
-/* ===== App state ===== */
-window.KEYMAP = {};
-window.LOCKCFG = Object.assign({}, EMBEDDED_LOCKDOWN_JSON);
-let HISTORY = [];
-let matrixOn = false, matrixAnim = null;
-let glitchOn = false;
-let themeLight = false;
-let sirenOn = false;
-let lockdownPollId = null;
-
-/* ===== Audio siren ===== */
-window.__SIREN = window.__SIREN || { ctx:null, gain:null, oscs:[], modId:null };
-function ensureAudio(){
-  try { if (!window.__SIREN.ctx){ const C = window.AudioContext || window.webkitAudioContext; if (!C) return null; window.__SIREN.ctx = new C(); } return window.__SIREN.ctx; } catch(e){ return null; }
-}
-function startSiren(volume=0.9, sustain=true){
-  const ctx = ensureAudio(); if (!ctx) return;
+/* Audio */
+function ensureAudio(){ try{ if(!siren.ctx){ const C=window.AudioContext||window.webkitAudioContext; if(!C) return null; siren.ctx=new C(); } return siren.ctx; }catch(e){ return null; } }
+function startSiren(volume=0.8){
+  const ctx=ensureAudio(); if(!ctx) return;
   stopSiren();
-  const s = window.__SIREN;
-  s.gain = ctx.createGain(); s.gain.gain.value = 0.00001; s.gain.connect(ctx.destination);
-  const freqs = [420,640,920];
-  s.oscs = freqs.map((f,i)=>{ const o = ctx.createOscillator(); o.type = i===0?'sine':(i===1?'triangle':'sawtooth'); o.frequency.value = f; o.connect(s.gain); o.start(); return o; });
-  const target = Math.min(1.4, volume||0.9);
-  s.gain.gain.linearRampToValueAtTime(target, ctx.currentTime + 0.05);
-  s.modId = setInterval(()=>{ const t=Date.now()/160; s.oscs.forEach((o,i)=> o.frequency.setTargetAtTime(freqs[i] + Math.sin(t+i)*(120+i*40), ctx.currentTime, 0.03)); },50);
-  if (!sustain) setTimeout(()=> stopSiren(), 1400);
+  siren.gain=ctx.createGain(); siren.gain.gain.value=0.00001; siren.gain.connect(ctx.destination);
+  const freqs=[420,640,920];
+  siren.oscs=freqs.map((f,i)=>{ const o=ctx.createOscillator(); o.type=i===0?'sine':(i===1?'triangle':'sawtooth'); o.frequency.value=f; o.connect(siren.gain); o.start(); return o; });
+  siren.gain.gain.linearRampToValueAtTime(Math.min(1.2,volume), ctx.currentTime+0.05);
+  siren.mod=setInterval(()=>{ const t=Date.now()/160; siren.oscs.forEach((o,i)=> o.frequency.setTargetAtTime(freqs[i]+Math.sin(t+i)*(110+i*40), ctx.currentTime, 0.03)); },60);
 }
 function stopSiren(){
-  const s = window.__SIREN;
-  if (s.modId){ clearInterval(s.modId); s.modId=null; }
-  s.oscs.forEach(o=>{ try{o.stop();}catch(e){} try{o.disconnect();}catch(e){} });
-  s.oscs = [];
-  if (s.gain){ try{s.gain.disconnect();}catch(e){} s.gain=null; }
-}
-function pulseSiren(volume=1.2, duration=1200){
-  const ctx = ensureAudio(); if (!ctx) return;
-  const gain = ctx.createGain(); gain.gain.value = 0.00001; gain.connect(ctx.destination);
-  const freqs=[480,720,1000], oscs=freqs.map((f,i)=>{ const o=ctx.createOscillator(); o.type=i===0?'sine':(i===1?'triangle':'sawtooth'); o.frequency.value=f; o.connect(gain); o.start(); return o; });
-  gain.gain.linearRampToValueAtTime(Math.min(1.6,volume), ctx.currentTime + 0.03);
-  const id=setInterval(()=>{ const t=Date.now()/150; oscs.forEach((o,i)=> o.frequency.setTargetAtTime(freqs[i]+Math.sin(t+i)*80, ctx.currentTime, 0.02)); },50);
-  setTimeout(()=>{ clearInterval(id); oscs.forEach(o=>{ try{o.stop();}catch(e){} try{o.disconnect();}catch(e){} }); try{gain.disconnect();}catch(e){} },duration);
+  if (siren.mod){ clearInterval(siren.mod); siren.mod=null; }
+  siren.oscs.forEach(o=>{ try{o.stop();}catch(e){} try{o.disconnect();}catch(e){} }); siren.oscs=[];
+  if (siren.gain){ try{siren.gain.disconnect();}catch(e){} siren.gain=null; }
 }
 
-/* ===== DOM refs ===== */
-const startGate = $('startGate'), gateInput = $('gateInput'), gateOpen = $('gateOpen');
-const app = $('app'), channelSelect = $('channelSelect'), delimiter = $('delimiter'), inputArea = $('inputArea');
-const encodeBtn = $('encodeBtn'), decodeBtn = $('decodeBtn'), outputBox = $('outputBox');
-const copyBtn = $('copyBtn'), scrambleBtn = $('scrambleBtn'), randomBtn = $('randomBtn'), exportBtn = $('exportBtn');
-const historyPanel = $('historyPanel'), coverage = $('coverage'), tokens = $('tokens'), speed = $('speed'), entropy = $('entropy');
-const toggleTheme = $('toggleTheme'), toggleMatrix = $('toggleMatrix'), toggleGlitch = $('toggleGlitch'), sirenToggle = $('sirenToggle');
-const shakeBtn = $('shakeBtn'), lockdownEl = $('lockdown'), lockTitle = $('lockTitle'), lockMessage = $('lockMessage');
-const lockSirenLight = $('lockSirenLight'), shakeLock = $('shakeLock'), refreshLock = $('refreshLock'), sirenVol = $('sirenVol');
-const profileStatus = $('profileStatus'), matrixCanvas = $('matrix');
-
-/* ===== Start gate (code 2342) ===== */
-function openApp(){ startGate.style.display='none'; startGate.setAttribute('aria-hidden','true'); app.setAttribute('aria-hidden','false'); app.style.opacity=1; }
-gateOpen.addEventListener('click', ()=>{ const v=(gateInput.value||'').trim(); if (v==='0000') openApp(); else { gateInput.value=''; gateInput.focus(); alert('Incorrect code'); } });
-gateInput.addEventListener('input', ()=> gateInput.value = gateInput.value.replace(/[^\d]/g,'').slice(0,4));
-gateInput.addEventListener('keyup', e=>{ if (e.key==='Enter') gateOpen.click(); });
-setTimeout(()=> gateInput.focus(),200);
-
-/* ===== File loaders ===== */
-async function loadKeyJson(){
-  try{ const r=await fetch('key.json',{cache:'no-store'}); if(!r.ok) throw new Error('key.json not found'); window.KEYMAP=await r.json(); populateChannels(); profileStatus.textContent='Loaded key.json'; }
-  catch(e){ window.KEYMAP=EMBEDDED_KEY_JSON; populateChannels(); profileStatus.textContent='Using embedded key.json'; }
-}
-function populateChannels(){
-  channelSelect.innerHTML = '';
-  const names = Object.keys(window.KEYMAP).sort();
-  if (!names.length){ const o=document.createElement('option'); o.textContent='(no channels)'; channelSelect.appendChild(o); return; }
-  names.forEach(n=>{ const opt=document.createElement('option'); opt.value=n; opt.textContent=n; channelSelect.appendChild(opt); });
-}
-
-async function loadLockdownJson(){
-  try{ const r=await fetch('lockdown.json',{cache:'no-store'}); if(!r.ok) throw new Error('lockdown.json not found'); const cfg=await r.json(); window.LOCKCFG=Object.assign({}, EMBEDDED_LOCKDOWN_JSON, cfg||{}); applyLockdown(window.LOCKCFG); if (lockdownPollId) clearInterval(lockdownPollId); lockdownPollId=setInterval(loadLockdownJson,(window.LOCKCFG.refreshSeconds||20)*1000); profileStatus.textContent='Loaded lockdown.json'; }
-  catch(e){ window.LOCKCFG=Object.assign({}, EMBEDDED_LOCKDOWN_JSON); applyLockdown(window.LOCKCFG); profileStatus.textContent='Using embedded lockdown.json'; }
-}
-
-function setInert(inert){
-  const focusables = app.querySelectorAll('button,a,input,select,textarea,[tabindex]');
-  focusables.forEach(el=>{
-    if (inert){
-      if (!el.hasAttribute('data-prev-tabindex')) el.setAttribute('data-prev-tabindex', el.getAttribute('tabindex') || '');
-      el.setAttribute('tabindex','-1'); el.setAttribute('aria-hidden','true');
-    } else {
-      const prev = el.getAttribute('data-prev-tabindex');
-      if (prev === '' || prev === null) el.removeAttribute('tabindex'); else el.setAttribute('tabindex', prev);
-      el.removeAttribute('data-prev-tabindex'); el.removeAttribute('aria-hidden');
-    }
-  });
-}
-function animateLockVisuals(on){
-  const inner = document.querySelector('#lockdown .lockinner') || lockdownEl;
-  if (!inner) return;
-  if (on){ inner.animate([{transform:'scale(1)'},{transform:'scale(1.01)'},{transform:'scale(1)'}],{duration:1600,iterations:Infinity}); }
-}
-
+/* Lockdown */
+const lockdownEl = $('lockdown'), lockTitle=$('lockTitle'), lockMessage=$('lockMessage'), sirenLight=$('sirenLight'), refreshLock=$('refreshLock'), sirenVol=$('sirenVol');
 function applyLockdown(cfg){
-  const active = !!(cfg && cfg.active);
+  const active=!!cfg.active;
   if (active){
     lockdownEl.classList.add('active'); lockdownEl.setAttribute('aria-hidden','false');
     lockTitle.textContent = cfg.title || 'SYSTEM LOCKDOWN';
     lockMessage.textContent = cfg.message || 'Access denied until lockdown is lifted';
-    app.style.filter = 'blur(4px) grayscale(.4)'; app.setAttribute('aria-hidden','true'); setInert(true);
-    lockSirenLight.style.display='inline-block'; lockSirenLight.classList.add('lock-flash');
-    if (cfg.visual && cfg.visual.matrixBackground) startMatrix(); else stopMatrix();
-    const vol = (cfg.visual && typeof cfg.visual.sirenVolume==='number') ? cfg.visual.sirenVolume : Number(sirenVol.value||0.9);
-    startSiren(vol,true); animateLockVisuals(true);
+    document.getElementById('app').style.filter='blur(4px) grayscale(.35)'; document.getElementById('app').setAttribute('aria-hidden','true');
+    // siren + pulse light
+    sirenLight.classList.add('pulse');
+    const vol = (cfg.visual && typeof cfg.visual.sirenVolume==='number') ? cfg.visual.sirenVolume : Number(sirenVol.value||0.8);
+    startSiren(vol);
   } else {
     lockdownEl.classList.remove('active'); lockdownEl.setAttribute('aria-hidden','true');
-    app.style.filter=''; app.setAttribute('aria-hidden','false'); setInert(false);
-    lockSirenLight.classList.remove('lock-flash'); lockSirenLight.style.display='none';
-    stopSiren(); stopMatrix();
+    document.getElementById('app').style.filter=''; document.getElementById('app').setAttribute('aria-hidden','false');
+    sirenLight.classList.remove('pulse');
+    stopSiren();
   }
 }
+refreshLock.addEventListener('click', ()=> loadLockdownJson());
+$('shakeBtn').addEventListener('click', ()=>{
+  if (!lockdownEl.classList.contains('active')) return;
+  const card = lockdownEl.querySelector('.lockcard');
+  if (card) card.animate([{transform:'translateY(0)'},{transform:'translateY(-12px) rotate(-1deg)'},{transform:'translateY(10px) rotate(1deg)'},{transform:'translateY(0)'}],{duration:800,easing:'ease-in-out'});
+});
 
-/* ===== Matrix rain ===== */
-const MC = matrixCanvas; let matCtx=null, cols=0, fontSize=16, drops=[];
-function startMatrix(){
-  MC.classList.add('active'); matrixOn=true; MC.width=window.innerWidth; MC.height=window.innerHeight; matCtx=MC.getContext('2d'); fontSize=16; cols=Math.floor(MC.width/fontSize); drops=new Array(cols).fill(1);
-  (function draw(){ if (!matrixOn) return; matCtx.fillStyle='rgba(0,0,0,0.12)'; matCtx.fillRect(0,0,MC.width,MC.height); matCtx.font=fontSize+'px monospace';
-    for(let i=0;i<cols;i++){ const text=String.fromCharCode(33+Math.random()*94); matCtx.fillStyle=`rgba(57,255,140,${0.15+Math.random()*0.85})`; matCtx.fillText(text,i*fontSize,drops[i]*fontSize); if (drops[i]*fontSize>MC.height && Math.random()>0.975) drops[i]=0; drops[i]++; }
-    matrixAnim=requestAnimationFrame(draw);
-  })();
+/* Loaders */
+async function loadKeyJson(){
+  try{ const r=await fetch('key.json',{cache:'no-store'}); if(!r.ok) throw new Error('key.json missing'); KEYMAP=await r.json(); populateChannels(); }
+  catch(e){ KEYMAP={ alpha:{ "a":"231jdhe$","b":"b7X9","c":"c3Kq","d":"d8Lm","e":"e5Rt","f":"f2Vz","g":"g4Np","h":"h1Qw","i":"i6Yu","j":"j0Bs","k":"k9Td","l":"l3Gh","m":"m8Pf","n":"n2Xa","o":"o7Re","p":"p4Uk","q":"q1Zm","r":"r6Vc","s":"s0Ln","t":"t5Bj","u":"u3Hy","v":"v8Qp","w":"w2Ks","x":"x9Df","y":"y4Rt","z":"z1Ng","A":"A23Jd","B":"B7xK","C":"C3qL","D":"D8mP","E":"E5tR","F":"F2zV","G":"G4pN","H":"H1wQ","I":"I6uY","J":"J0sB","K":"K9dT","L":"L3hG","M":"M8fP","N":"N2aX","O":"O7eR","P":"P4kU","Q":"Q1mZ","R":"R6cV","S":"S0nL","T":"T5jB","U":"U3yH","V":"V8pQ","W":"W2sK","X":"X9fD","Y":"Y4tR","Z":"Z1gN"," ":"SP-00",".":"DOT-2E",",":"COM-2C","!":"EX-21","?":"Q-3F" } }; populateChannels(); }
 }
-function stopMatrix(){ MC.classList.remove('active'); matrixOn=false; if (matrixAnim) cancelAnimationFrame(matrixAnim); if (matCtx) matCtx.clearRect(0,0,MC.width,MC.height); }
-
-/* ===== Entropy ===== */
-function estimateEntropy(s){ if(!s) return 0; const f={}; for(const c of s) f[c]=(f[c]||0)+1; let H=0; const L=s.length; for(const k in f){ const p=f[k]/L; H -= p*Math.log2(p); } return H; }
-
-/* ===== Encoding / Decoding (with pad, fixed UNK decode) ===== */
-const PAD_LENGTH = 5;
-function randomPad(len=PAD_LENGTH){ const letters='ABCDEFGHIJKLMNOPQRSTUVWXYZ'; let out=''; for(let i=0;i<len;i++) out+=letters[Math.floor(Math.random()*letters.length)]; return out; }
-
-function encode(channel, delim, text, options={pad:true,padAtStart:true}){
-  const t0=now(); const map=window.KEYMAP[channel]||{}; const payload = options.pad ? (options.padAtStart ? randomPad(PAD_LENGTH)+text : text+randomPad(PAD_LENGTH)) : text;
-  const tokens=[]; for(const ch of Array.from(payload)){ if (Object.prototype.hasOwnProperty.call(map,ch)) tokens.push(map[ch]); else tokens.push(`${channel}_UNK_${hexOfChar(ch)}`); }
-  return { out: tokens.join(delim), tokens, elapsed: now()-t0 };
+function populateChannels(){
+  const sel=$('channelSelect'); sel.innerHTML='';
+  const names=Object.keys(KEYMAP).sort(); if(!names.length){ const o=document.createElement('option'); o.textContent='(no channels)'; sel.appendChild(o); return; }
+  names.forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n; sel.appendChild(o); });
+}
+async function loadLockdownJson(){
+  try{ const r=await fetch('lockdown.json',{cache:'no-store'}); if(!r.ok) throw new Error('lockdown missing'); const cfg=await r.json(); LOCKCFG = Object.assign({active:false,visual:{sirenVolume:0.8}}, cfg); applyLockdown(LOCKCFG); setTimeout(loadLockdownJson, (LOCKCFG.refreshSeconds||30)*1000); }
+  catch(e){ LOCKCFG = { active:false, visual:{sirenVolume:0.8}, title:'', message:'' }; applyLockdown(LOCKCFG); }
 }
 
-/* Fixed: decode unknown tokens regardless of channel presence.
-   Accepts tokens like "_meta_UNK_49" or "alpha_UNK_20" and decodes their hex payload back to characters.
-*/
-function decode(channel, delim, tokenString, options={pad:true,padAtStart:true}){
-  const t0=now(); const map=window.KEYMAP[channel]||{}; const rev={}; for(const k in map) rev[map[k]] = k;
-  const toks = tokenString ? tokenString.split(delim).filter(t=>t.length>0) : [];
+/* Encode/Decode with UNK fallback */
+const channelSelect=$('channelSelect'), delimiter=$('delimiter'), inputArea=$('inputArea'), outputBox=$('outputBox');
+const coverage=$('coverage'), tokens=$('tokens'), speed=$('speed'), entropyEl=$('entropy');
+
+function encode(ch, delim, text){
+  const t0=now(); const map=KEYMAP[ch]||{}; const toks=[];
+  for (const c of Array.from(text)){ if (Object.prototype.hasOwnProperty.call(map,c)) toks.push(map[c]); else toks.push(`${ch}_UNK_${hexOfChar(c)}`); }
+  return { out:toks.join(delim), tokens:toks, elapsed:now()-t0 };
+}
+function decode(ch, delim, tokstr){
+  const t0=now(); const map=KEYMAP[ch]||{}; const rev={}; for(const k in map) rev[map[k]]=k;
+  const toks = tokstr ? tokstr.split(delim).filter(Boolean) : [];
   const chars = toks.map(tk=>{
-    const m = tk.match(/^(.+?)_UNK_([0-9a-fA-F]+)$/); // match ANY channel name
-    if (m){ return charFromHex(m[2]); }
-    if (rev[tk] !== undefined){ return rev[tk]; }
+    const m = tk.match(/^(.+?)_UNK_([0-9a-fA-F]+)$/);
+    if (m) return charFromHex(m[2]);
+    if (rev[tk] !== undefined) return rev[tk];
     return '?';
   });
-  let text = chars.join('');
-  if (options.pad && text.length > PAD_LENGTH){
-    text = options.padAtStart ? text.slice(PAD_LENGTH) : text.slice(0,-PAD_LENGTH);
-  }
-  return { text, toks, elapsed: now()-t0 };
+  return { text:chars.join(''), toks, elapsed:now()-t0 };
 }
 
-/* ===== UI wiring ===== */
-const encodeBtn = $('encodeBtn'); const decodeBtn = $('decodeBtn');
-encodeBtn.addEventListener('click', ()=>{
+/* Wire buttons */
+$('encodeBtn').addEventListener('click', ()=>{
   const ch=channelSelect.value; const d=delimiter.value||' '; const txt=inputArea.value||'';
-  if (!ch || !(window.KEYMAP && window.KEYMAP[ch])) { alert('Choose a valid channel'); return; }
-  const res = encode(ch,d,txt,{pad:true,padAtStart:true});
-  outputBox.textContent = res.out;
-  coverage.textContent = Math.round((Object.keys(window.KEYMAP[ch]||{}).length)/256*100) + '%';
-  tokens.textContent = `${res.tokens.length} / ${res.out.length}`;
-  speed.textContent = `${Math.round(res.elapsed)}ms`;
-  entropy.textContent = estimateEntropy(res.out).toFixed(2);
-  HISTORY.unshift({ ts:isoNow(), action:'encode', channel:ch, ms:Math.round(res.elapsed), input:txt, output:res.out });
-  renderHistory(); applyGlitch();
+  if (!ch || !KEYMAP[ch]){ alert('Choose a valid channel'); return; }
+  const r=encode(ch,d,txt);
+  outputBox.textContent=r.out;
+  coverage.textContent = Math.round(Object.keys(KEYMAP[ch]).length/256*100) + '%';
+  tokens.textContent = `${r.tokens.length} / ${r.out.length}`;
+  speed.textContent = `${Math.round(r.elapsed)}ms`;
+  entropyEl.textContent = entropy(r.out).toFixed(2);
 });
-
-decodeBtn.addEventListener('click', ()=>{
+$('decodeBtn').addEventListener('click', ()=>{
   const ch=channelSelect.value; const d=delimiter.value||' '; const tok=outputBox.textContent||'';
-  // Fixed: allow decode even if channel isn't in KEYMAP, because UNK tokens include their channel name in the token
-  const res = decode(ch,d,tok,{pad:true,padAtStart:true});
-  inputArea.value = res.text;
-  coverage.textContent = Math.round((Object.keys(window.KEYMAP[ch]||{}).length)/256*100) + '%';
-  tokens.textContent = `${res.toks.length} / ${tok.length}`;
-  speed.textContent = `${Math.round(res.elapsed)}ms`;
-  entropy.textContent = estimateEntropy(tok).toFixed(2);
-  HISTORY.unshift({ ts:isoNow(), action:'decode', channel:ch, ms:Math.round(res.elapsed), tokens:res.toks.length, outputText:res.text });
-  renderHistory(); applyGlitch();
+  if (!ch){ alert('Choose a channel'); return; }
+  const r=decode(ch,d,tok);
+  inputArea.value=r.text;
+  coverage.textContent = Math.round(Object.keys(KEYMAP[ch]||{}).length/256*100) + '%';
+  tokens.textContent = `${r.toks.length} / ${tok.length}`;
+  speed.textContent = `${Math.round(r.elapsed)}ms`;
+  entropyEl.textContent = entropy(tok).toFixed(2);
+});
+$('copyBtn').addEventListener('click', async ()=>{
+  const txt=outputBox.textContent||''; if(!txt) return;
+  try{ await navigator.clipboard.writeText(txt);}catch(e){}
+});
+sirenVol.addEventListener('input', ()=>{
+  const v=Number(sirenVol.value||0.8);
+  if (siren.gain && siren.ctx) try{ siren.gain.gain.setTargetAtTime(Math.min(1.2,v), siren.ctx.currentTime, 0.02); }catch(e){}
 });
 
-/* Controls */
-copyBtn.addEventListener('click', async ()=>{ const txt=outputBox.textContent||''; if (!txt) return; try{ await navigator.clipboard.writeText(txt); profileStatus.textContent='Copied'; }catch(e){ profileStatus.textContent='Copy failed'; } });
-scrambleBtn.addEventListener('click', ()=>{ const d=delimiter.value||' '; const t=outputBox.textContent||''; if (!t) return; const s=shuffle(t.split(d)).join(d); outputBox.textContent=s; HISTORY.unshift({ts:isoNow(),action:'scramble',tokens:s.split(d).length}); renderHistory(); });
-randomBtn.addEventListener('click', ()=>{ const s=['hello world','secret code','play time','box hill lab','the quick brown fox','lorem ipsum','TEST123','😀 smile','I have']; inputArea.value=s[Math.floor(Math.random()*s.length)]; });
-exportBtn.addEventListener('click', ()=> downloadFile(`history_${new Date().toISOString().replace(/[:.]/g,'-')}.json`, JSON.stringify(HISTORY,null,2)));
-
-toggleTheme.addEventListener('click', ()=>{ themeLight=!themeLight; document.body.classList.toggle('light', themeLight); });
-toggleGlitch.addEventListener('click', ()=>{ glitchOn=!glitchOn; applyGlitch(); });
-toggleMatrix.addEventListener('click', ()=>{ if (!matrixOn) startMatrix(); else stopMatrix(); });
-sirenToggle.addEventListener('click', ()=>{ if (window.__SIREN.oscs.length){ stopSiren(); lockSirenLight.style.display='none'; } else { startSiren(Number(sirenVol.value||0.9), true); lockSirenLight.style.display='inline-block'; } });
-shakeBtn.addEventListener('click', ()=> shakeLockAction());
-shakeLock.addEventListener('click', ()=> shakeLockAction());
-refreshLock.addEventListener('click', ()=> loadLockdownJson());
-sirenVol.addEventListener('input', ()=>{ const v=Number(sirenVol.value||0.9); if (window.__SIREN.gain) window.__SIREN.gain.gain.setTargetAtTime(Math.min(1.4,v), window.__SIREN.ctx.currentTime, 0.02); });
-
-/* History render */
-function renderHistory(){ historyPanel.innerHTML=''; for(const h of HISTORY.slice(0,200)){ const r=document.createElement('div'); r.className='hrow'; const t=document.createElement('div'); t.className='htime'; t.textContent=new Date(h.ts).toLocaleString(); const txt=document.createElement('div'); txt.className='htext'; let s=h.action.toUpperCase(); if (h.channel) s+=' • '+h.channel; if (h.input) s+=' • '+(h.input.length>80?h.input.slice(0,77)+'…':h.input); txt.textContent=s; r.appendChild(t); r.appendChild(txt); historyPanel.appendChild(r); } }
-
-/* Glitch */
-function applyGlitch(){ if (glitchOn){ outputBox.classList.add('glitch'); outputBox.setAttribute('data-text', outputBox.textContent); outputBox.animate([{opacity:1},{opacity:.7},{opacity:1}],{duration:420,iterations:1}); } else { outputBox.classList.remove('glitch'); outputBox.removeAttribute('data-text'); } }
-
-/* Lockdown shake */
-function shakeLockAction(){
-  const wasActive = !!(window.LOCKCFG && window.LOCKCFG.active);
-  lockdownEl.classList.add('active'); lockdownEl.setAttribute('aria-hidden','false');
-  lockSirenLight.style.display='inline-block'; lockSirenLight.classList.add('lock-flash');
-  const el=document.querySelector('.lockcard');
-  if (el) el.animate([{transform:'translateY(0)'},{transform:'translateY(-14px) rotate(-1deg)'},{transform:'translateY(10px) rotate(1deg)'},{transform:'translateY(0)'}],{duration:800,easing:'ease-in-out'});
-  pulseSiren(1.4,1400);
-  setTimeout(()=>{ if (!wasActive){ lockdownEl.classList.remove('active'); lockdownEl.setAttribute('aria-hidden','true'); lockSirenLight.classList.remove('lock-flash'); lockSirenLight.style.display='none'; } },1600);
-}
-
-/* ===== Init ===== */
-async function init(){
-  app.setAttribute('aria-hidden','true'); app.style.opacity=0;
-  await loadKeyJson(); await loadLockdownJson();
-  delimiter.value = delimiter.value || ' ';
-  channelSelect.addEventListener('change', ()=> profileStatus.textContent = `Channel: ${channelSelect.value}`);
-  window.addEventListener('resize', ()=>{ if (matrixOn){ MC.width=window.innerWidth; MC.height=window.innerHeight; } });
-}
-init();
-
-/* Dev shortcut: Ctrl+Shift+L toggles lockdown locally */
-document.addEventListener('keydown', e=>{ if (e.ctrlKey && e.shiftKey && e.key.toLowerCase()==='l'){ window.LOCKCFG.active = !window.LOCKCFG.active; applyLockdown(window.LOCKCFG); } });
-
-/* ===== The specific case you reported =====
-   Example tokens: "_meta_UNK_49 _meta_UNK_20 _meta_UNK_68 _meta_UNK_61 _meta_UNK_76"
-   With delimiter = space, Decode will produce: "I hav"
-   Because the decoder now handles ANY "<channel>_UNK_<hex>" token, you don't need a "_meta" channel in key.json.
-*/
+/* Init */
+(async function init(){
+  await loadKeyJson();
+  await loadLockdownJson();
+})();
 </script>
 </body>
 </html>
