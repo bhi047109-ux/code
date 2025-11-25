@@ -1,38 +1,60 @@
 {
+  "alpha": {
+    "A": "01","B": "02","C": "03","D": "04","E": "05","F": "06","G": "07","H": "08","I": "09","J": "0A",
+    "K": "0B","L": "0C","M": "0D","N": "0E","O": "0F","P": "10","Q": "11","R": "12","S": "13","T": "14",
+    "U": "15","V": "16","W": "17","X": "18","Y": "19","Z": "1A",
+    "a": "21","b": "22","c": "23","d": "24","e": "25","f": "26","g": "27","h": "28","i": "29","j": "2A",
+    "k": "2B","l": "2C","m": "2D","n": "2E","o": "2F","p": "30","q": "31","r": "32","s": "33","t": "34",
+    "u": "35","v": "36","w": "37","x": "38","y": "39","z": "3A",
+    "0": "40","1": "41","2": "42","3": "43","4": "44","5": "45","6": "46","7": "47","8": "48","9": "49",
+    " ": "00", ".": "2E", ",": "2C", "!": "21", "?": "3F", ":": "3A", ";": "3B", "-": "2D", "_": "5F",
+    "(": "28", ")": "29", "'": "27", "\"": "22", "/": "2F", "\\": "5C", "@": "40", "#": "23", "$": "24",
+    "%": "25", "&": "26", "+": "2B", "=": "3D", "<": "3C", ">": "3E"
+  },
 
-  "ch1": {
-    "A":"ch1_f9G$7z@Q!2rX%8dL","B":"ch1_Z1!q9^mT&4w*eR7s","C":"ch1_p@8V!x$2Lz#7Qk^5",
-    "D":"ch1_Jd!4z%9&Xw@2qL7M","E":"ch1_Lm!7a$3^Zr9@8fQ","F":"ch1_Ty2#p$6!vX@9d%4",
-    "G":"ch1_Rq8!z$1^mT7@5nK","H":"ch1_Ko3$w!9@x%2rL8","I":"ch1_Vb7!q$2^nM6@4tP",
-    "J":"ch1_Yc9!r$3^pL8@5vN","K":"ch1_Ud4!s$7^qN2@6wM","L":"ch1_Xe5!t$8^rO3@7yL",
-    "M":"ch1_Zf6!u$9^sP4@8zK","N":"ch1_Ag7!v$1^tQ5@9aJ","O":"ch1_Bh8!w$2^uR6@0bI",
-    "P":"ch1_Ci9!x$3^vS7@1cH","Q":"ch1_Dj0!y$4^wT8@2dG","R":"ch1_Ek1!z$5^xU9@3eF",
-    "S":"ch1_Fl2!a$6^yV0@4fE","T":"ch1_Gm3!b$7^zW1@5gD","U":"ch1_Hn4!c$8^0X2@6hC",
-    "V":"ch1_Io5!d$9^1Y3@7iB","W":"ch1_Jp6!e$1^2Z4@8jA","X":"ch1_Kq7!f$2^3A5@9kZ",
-    "Y":"ch1_Lr8!g$3^4B6@0lY","Z":"ch1_Ms9!h$4^5C7@1mX",
-    "a":"ch1_Nt0!i$5^6D8@2nW","b":"ch1_Ou1!j$6^7E9@3oV","c":"ch1_Pv2!k$7^8F0@4pU",
-    "d":"ch1_Qw3!l$8^9G1@5qT","e":"ch1_Rx4!m$9^0H2@6rS","f":"ch1_Sy5!n$1^1I3@7sR",
-    "g":"ch1_Tz6!o$2^2J4@8tQ","h":"ch1_Ua7!p$3^3K5@9uP","i":"ch1_Vb8!q$4^4L6@0vO",
-    "j":"ch1_Wc9!r$5^5M7@1wN","k":"ch1_Xd0!s$6^6N8@2xM","l":"ch1_Ye1!t$7^7O9@3yL",
-    "m":"ch1_Zf2!u$8^8P0@4zK","n":"ch1_Ag3!v$9^9Q1@5aJ","o":"ch1_Bh4!w$1^0R2@6bI",
-    "p":"ch1_Ci5!x$2^1S3@7cH","q":"ch1_Dj6!y$3^2T4@8dG","r":"ch1_Ek7!z$4^3U5@9eF",
-    "s":"ch1_Fl8!a$5^4V6@0fE","t":"ch1_Gm9!b$6^5W7@1gD","u":"ch1_Hn0!c$7^6X8@2hC",
-    "v":"ch1_Io1!d$8^7Y9@3iB","w":"ch1_Jp2!e$9^8Z0@4jA","x":"ch1_Kq3!f$1^9A1@5kZ",
-    "y":"ch1_Lr4!g$2^0B2@6lY","z":"ch1_Ms5!h$3^1C3@7mX",
-    "0":"ch1_Nt6!i$4^2D4@8nW","1":"ch1_Ou7!j$5^3E5@9oV","2":"ch1_Pv8!k$6^4F6@0pU",
-    "3":"ch1_Qw9!l$7^5G7@1qT","4":"ch1_Rx0!m$8^6H8@2rS","5":"ch1_Sy1!n$9^7I9@3sR",
-    "6":"ch1_Tz2!o$1^8J0@4tQ","7":"ch1_Ua3!p$2^9K1@5uP","8":"ch1_Vb4!q$3^0L2@6vO",
-    "9":"ch1_Wc5!r$4^1M3@7wN",
-    " ":"ch1_space!@#9$%^&*()","!":"ch1_bang$%^&*()_+","@":"ch1_at!@#$%^&*()",
-    "#":"ch1_hash!@#$%^&*()","$":"ch1_dollar$%^&*()_+","%":"ch1_percent!@#$%^&*",
-    "^":"ch1_caret^&*()_+=-","&":"ch1_amp!@#$%^&*()","*":"ch1_star$%^&*()_+",
-    "(":"ch1_lparen!@#$%^&*"," )":"ch1_rparen^&*()_+=","-":"ch1_dash!@#$%^&*()",
-    "_":"ch1_uscore$%^&*()_+","=":"ch1_equals!@#$%^&*","+":"ch1_plus^&*()_+=",
-    "[":"ch1_lbrack!@#$%^&*]","]":"ch1_rbrack$%^&*()_+","{":"ch1_lbrace!@#$%^&*}",
-    "}":"ch1_rbrace^&*()_+=",";":"ch1_semicolon!@#$%^&*",
-    ":":"ch1_colon$%^&*()_+","'":"ch1_quote!@#$%^&*","\"":"ch1_dquote^&*()_+=",
-    ",":"ch1_comma!@#$%^&*",".":"ch1_dot$%^&*()_+","/":"ch1_slash!@#$%^&*",
-    "?":"ch1_qmark^&*()_+=","<":"ch1_lt!@#$%^&*()",">":"ch1_gt$%^&*()_+",
-    "\\n":"ch1_newline!@#$%^","\\t":"ch1_tab$%^&*()_+"
+  "numeric": {
+    "0": "N0","1": "N1","2": "N2","3": "N3","4": "N4","5": "N5","6": "N6","7": "N7","8": "N8","9": "N9",
+    " ": "N00"
+  },
+
+  "simple": {
+    "A": "A1","B": "B1","C": "C1","D": "D1","E": "E1","F": "F1","G": "G1","H": "H1","I": "I1","J": "J1",
+    "K": "K1","L": "L1","M": "M1","N": "N1","O": "O1","P": "P1","Q": "Q1","R": "R1","S": "S1","T": "T1",
+    "U": "U1","V": "V1","W": "W1","X": "X1","Y": "Y1","Z": "Z1",
+    "a": "a1","b": "b1","c": "c1","d": "d1","e": "e1","f": "f1","g": "g1","h": "h1","i": "i1","j": "j1",
+    "k": "k1","l": "l1","m": "m1","n": "n1","o": "o1","p": "p1","q": "q1","r": "r1","s": "s1","t": "t1",
+    "u": "u1","v": "v1","w": "w1","x": "x1","y": "y1","z": "z1",
+    " ": "sp"
+  },
+
+  "emoji": {
+    "😀": "E01",
+    "😁": "E02",
+    "😂": "E03",
+    "😊": "E04",
+    "😎": "E05",
+    "❤️": "E06",
+    "👍": "E07",
+    "🎉": "E08",
+    "🔥": "E09",
+    "✨": "E0A",
+    " ": "E00"
+  },
+
+  "noch": {
+    "A": "n01","B":"n02","C":"n03","D":"n04","E":"n05","F":"n06","G":"n07","H":"n08","I":"n09","J":"n0A",
+    "K":"n0B","L":"n0C","M":"n0D","N":"n0E","O":"n0F","P":"n10","Q":"n11","R":"n12","S":"n13","T":"n14",
+    "U":"n15","V":"n16","W":"n17","X":"n18","Y":"n19","Z":"n1A",
+    "a":"n21","b":"n22","c":"n23","d":"n24","e":"n25","f":"n26","g":"n27","h":"n28","i":"n29","j":"n2A",
+    "k":"n2B","l":"n2C","m":"n2D","n":"n2E","o":"n2F","p":"n30","q":"n31","r":"n32","s":"n33","t":"n34",
+    "u":"n35","v":"n36","w":"n37","x":"n38","y":"n39","z":"n3A",
+    "0":"n40","1":"n41","2":"n42","3":"n43","4":"n44","5":"n45","6":"n46","7":"n47","8":"n48","9":"n49",
+    " ":"n00", ".":"n2E", ",":"n2C", "!":"n21", "?":"n3F"
+  },
+
+  "_meta": {
+    "version": "1.2",
+    "generatedAt": "2025-11-25T11:40:00+11:00",
+    "notes": "Added 'noch' channel (no-ch / neutral channel). Encoder recommendation: to improve token uniqueness and resist simple pattern attacks, the encoder should prepend or append 5 random letters (A–Z) to each encoded payload before outputting tokens. These 5 letters are NOT part of the channel mapping and should be generated at encode time by the app (UTF-8 letters). On decode, the app should detect and remove the 5-letter random prefix/suffix before mapping tokens back to characters."
   }
 }
