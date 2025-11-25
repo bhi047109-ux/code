@@ -297,7 +297,7 @@ const profileStatus = $('profileStatus'), matrixCanvas = $('matrix');
 
 /* ===== Start gate (code 2342) ===== */
 function openApp(){ startGate.style.display='none'; startGate.setAttribute('aria-hidden','true'); app.setAttribute('aria-hidden','false'); app.style.opacity=1; }
-gateOpen.addEventListener('click', ()=>{ const v=(gateInput.value||'').trim(); if (v==='2342') openApp(); else { gateInput.value=''; gateInput.focus(); alert('Incorrect code'); } });
+gateOpen.addEventListener('click', ()=>{ const v=(gateInput.value||'').trim(); if (v==='0000') openApp(); else { gateInput.value=''; gateInput.focus(); alert('Incorrect code'); } });
 gateInput.addEventListener('input', ()=> gateInput.value = gateInput.value.replace(/[^\d]/g,'').slice(0,4));
 gateInput.addEventListener('keyup', e=>{ if (e.key==='Enter') gateOpen.click(); });
 setTimeout(()=> gateInput.focus(),200);
