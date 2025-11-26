@@ -3,7 +3,11 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Encoder/Decoder Minimal with Lockdown (Pre‑alarm Voice)</title>
+<title>Encoder / Decoder Minimal with Lockdown</title>
+
+<!-- Embedded SVG favicon to avoid 404 -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%230b1220'/%3E%3Ctext x='50' y='58' font-size='48' text-anchor='middle' fill='%23eaf2ff' font-family='system-ui,Segoe UI,Roboto,Arial'%3EE%3C/text%3E%3C/svg%3E">
+
 <style>
   :root{ --bg:#0b1220; --panel:#10192b; --fg:#eaf2ff; --muted:#99a8c2; --accent:#57d0ff; --danger:#ff4d6d; }
   html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg),#070c17);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,Arial}
@@ -18,13 +22,13 @@
   .ghost{background:transparent;border:1px solid rgba(255,255,255,.1);color:var(--fg)}
   .status{margin-top:10px;display:flex;gap:12px;font-size:12px;color:var(--muted)}
   pre{min-height:120px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);padding:10px;border-radius:8px;white-space:pre-wrap}
-  /* Lockdown overlay */
   .lockdown{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:radial-gradient(circle at 30% 20%, rgba(87,208,255,.08), rgba(0,0,0,.92));z-index:9999}
   .lockdown.active{display:flex}
   .lockcard{max-width:720px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:20px;color:#fff;text-align:center}
   .siren{width:36px;height:36px;border-radius:50%;background:var(--danger);box-shadow:0 0 20px var(--danger)}
   .pulse{animation:pulse 800ms infinite}
   @keyframes pulse{0%{transform:scale(1);opacity:1}50%{transform:scale(1.35);opacity:.6}100%{transform:scale(1);opacity:1}}
+  @media (max-width:720px){ .row{grid-template-columns:1fr} }
 </style>
 </head>
 <body>
@@ -32,10 +36,10 @@
   <div id="lockdown" class="lockdown" aria-hidden="true" role="alert">
     <div class="lockcard">
       <div style="display:flex;gap:10px;justify-content:center;align-items:center;margin-bottom:8px">
-        <div id="sirenLight" class="siren"></div>
-        <h2 id="lockTitle" style="margin:0">LOUD ALERT: LOCKDOWN IS STARTING!</h2>
+        <div id="sirenLight" class="siren" aria-hidden="true"></div>
+        <h2 id="lockTitle" style="margin:0">ALERT: Lockdown starting</h2>
       </div>
-      <p id="lockMessage" style="margin:0 0 12px">Access denied until lockdown is lifted</p>
+      <p id="lockMessage" style="margin:0 0 12px">This site will sound an alarm. Please mute your device now if needed.</p>
       <div style="display:flex;gap:8px;justify-content:center;align-items:center">
         <button id="refreshLock" class="btn ghost">Refresh</button>
         <label style="display:flex;gap:6px;align-items:center"><input id="sirenVol" type="range" min="0" max="1" step="0.05" value="0.8"> Volume</label>
@@ -48,7 +52,7 @@
     <h1>Encoder / Decoder</h1>
 
     <label>Channel</label>
-    <select id="channelSelect"><option>alpha</option></select>
+    <select id="channelSelect"><option value="alpha">alpha</option></select>
 
     <label style="margin-top:10px">Delimiter</label>
     <input id="delimiter" type="text" value=" " />
@@ -81,12 +85,20 @@
   </div>
 
 <script>
+/* Minimal single-file app
+   - Single channel "alpha"
+   - Encode / Decode with UNK hex fallback (works for tokens like _meta_UNK_49)
+   - Lockdown overlay controlled by lockdown.json (polls refreshSeconds)
+   - Pre-alarm voice and chime before siren so friends can mute
+   - Embedded favicon via data URI prevents 404
+*/
+
 /* Helpers */
 const $ = id => document.getElementById(id);
 const now = () => performance.now();
 function hexOfChar(ch){ const u=new TextEncoder().encode(ch); return Array.from(u).map(b=>b.toString(16).padStart(2,'0')).join(''); }
-function charFromHex(hex){ const bytes=hex.match(/.{1,2}/g); if(!bytes) return ''; try{ return new TextDecoder().decode(new Uint8Array(bytes.map(h=>parseInt(h,16)))); } catch(e){ return '?'; } }
-function entropy(s){ if(!s) return 0; const f={}; for(const c of s) f[c]=(f[c]||0)+1; let H=0; const L=s.length; for(const k in f){ const p=f[k]/L; H -= p*Math.log2(p);} return H; }
+function charFromHex(hex){ const bytes = hex.match(/.{1,2}/g); if(!bytes) return ''; try{ return new TextDecoder().decode(new Uint8Array(bytes.map(h=>parseInt(h,16)))); }catch(e){ return '?'; } }
+function estimateEntropy(s){ if(!s) return 0; const f={}; for(const c of s) f[c]=(f[c]||0)+1; let H=0; const L=s.length; for(const k in f){ const p=f[k]/L; H -= p*Math.log2(p); } return H; }
 
 /* Single channel mapping */
 const KEYMAP = {
@@ -95,4 +107,168 @@ const KEYMAP = {
     "k":"k9Td","l":"l3Gh","m":"m8Pf","n":"n2Xa","o":"o7Re","p":"p4Uk","q":"q1Zm","r":"r6Vc","s":"s0Ln","t":"t5Bj",
     "u":"u3Hy","v":"v8Qp","w":"w2Ks","x":"x9Df","y":"y4Rt","z":"z1Ng",
     "A":"A23Jd","B":"B7xK","C":"C3qL","D":"D8mP","E":"E5tR","F":"F2zV","G":"G4pN","H":"H1wQ","I":"I6uY","J":"J0sB",
-    "K":"K9dT","L":"L3hG","M":"M8fP","N":"N2aX","O":"O7eR","P":"P4kU","Q":"Q1mZ","R":"R
+    "K":"K9dT","L":"L3hG","M":"M8fP","N":"N2aX","O":"O7eR","P":"P4kU","Q":"Q1mZ","R":"R6cV","S":"S0nL","T":"T5jB",
+    "U":"U3yH","V":"V8pQ","W":"W2sK","X":"X9fD","Y":"Y4tR","Z":"Z1gN",
+    " ":"SP-00",".":"DOT-2E",",":"COM-2C","!":"EX-21","?":"Q-3F"
+  }
+};
+
+/* Audio siren and pre-alarm */
+let SIREN = { ctx:null, gain:null, oscs:[], mod:null };
+function ensureAudio(){ try{ if(!SIREN.ctx){ const C = window.AudioContext || window.webkitAudioContext; if(!C) return null; SIREN.ctx = new C(); } return SIREN.ctx; }catch(e){ return null; } }
+
+function startSiren(volume=0.8){
+  const ctx = ensureAudio(); if(!ctx) return;
+  stopSiren();
+  SIREN.gain = ctx.createGain(); SIREN.gain.gain.value = 0.00001; SIREN.gain.connect(ctx.destination);
+  const freqs = [420,640,920];
+  SIREN.oscs = freqs.map((f,i)=>{ const o = ctx.createOscillator(); o.type = i===0 ? 'sine' : (i===1 ? 'triangle' : 'sawtooth'); o.frequency.value = f; o.connect(SIREN.gain); try{o.start();}catch(e){} return o; });
+  try{ SIREN.gain.gain.linearRampToValueAtTime(Math.min(1.2,volume), ctx.currentTime + 0.05); }catch(e){}
+  SIREN.mod = setInterval(()=>{ const t = Date.now()/160; SIREN.oscs.forEach((o,i)=>{ try{o.frequency.setTargetAtTime(freqs[i] + Math.sin(t+i)*(110+i*40), ctx.currentTime, 0.03);}catch(e){} }); }, 60);
+}
+
+function stopSiren(){
+  if(SIREN.mod){ clearInterval(SIREN.mod); SIREN.mod = null; }
+  if(SIREN.oscs && SIREN.oscs.length){ for(const o of SIREN.oscs){ try{o.stop();}catch(e){} try{o.disconnect();}catch(e){} } SIREN.oscs = []; }
+  if(SIREN.gain){ try{ SIREN.gain.disconnect(); }catch(e){} SIREN.gain = null; }
+}
+
+/* Pre-alarm chime and TTS announcement so friends can mute */
+let PREALARM_PLAYED = false;
+function preAlarmChime(){
+  const ctx = ensureAudio(); if(!ctx) return;
+  const g = ctx.createGain(); g.gain.value = 0.00001; g.connect(ctx.destination);
+  const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = 440; o.connect(g); try{o.start();}catch(e){}
+  const t0 = ctx.currentTime;
+  try{ g.gain.linearRampToValueAtTime(0.9, t0 + 0.03); o.frequency.linearRampToValueAtTime(880, t0 + 0.6); }catch(e){}
+  setTimeout(()=>{ try{o.stop();}catch(e){} try{o.disconnect();}catch(e){} try{g.disconnect();}catch(e){} }, 700);
+}
+function announceThenSiren(volume){
+  if(PREALARM_PLAYED){ startSiren(volume); return; }
+  PREALARM_PLAYED = true;
+  preAlarmChime();
+  const announcement = 'Attention. Lockdown is starting. Please mute this tab or device now.';
+  if('speechSynthesis' in window){
+    const u = new SpeechSynthesisUtterance(announcement);
+    u.volume = Math.min(1, volume + 0.2);
+    u.rate = 1;
+    u.pitch = 0.9;
+    u.onend = ()=> startSiren(volume);
+    try{ window.speechSynthesis.cancel(); window.speechSynthesis.speak(u); }catch(e){ startSiren(volume); }
+  } else {
+    setTimeout(()=> startSiren(volume), 800);
+  }
+}
+
+/* Lockdown loader and applier */
+const lockdownEl = $('lockdown'), lockTitle = $('lockTitle'), lockMessage = $('lockMessage'), sirenLight = $('sirenLight'), refreshLock = $('refreshLock'), sirenVol = $('sirenVol');
+let LOCKCFG = { active:false, title:'', message:'', refreshSeconds:30, visual:{ sirenVolume:0.8 } };
+
+function applyLockdown(cfg){
+  const active = !!cfg.active;
+  if(active){
+    lockdownEl.classList.add('active'); lockdownEl.setAttribute('aria-hidden','false');
+    lockTitle.textContent = cfg.title || 'ALERT: Lockdown starting';
+    lockMessage.textContent = cfg.message || 'This site will sound an alarm. Please mute your device now if needed.';
+    document.getElementById('app').style.filter = 'blur(4px) grayscale(.35)'; document.getElementById('app').setAttribute('aria-hidden','true');
+    sirenLight.classList.add('pulse');
+    const vol = (cfg.visual && typeof cfg.visual.sirenVolume === 'number') ? cfg.visual.sirenVolume : Number(sirenVol.value || 0.8);
+    announceThenSiren(vol);
+  } else {
+    lockdownEl.classList.remove('active'); lockdownEl.setAttribute('aria-hidden','true');
+    document.getElementById('app').style.filter = ''; document.getElementById('app').setAttribute('aria-hidden','false');
+    sirenLight.classList.remove('pulse');
+    stopSiren();
+    PREALARM_PLAYED = false;
+    if('speechSynthesis' in window) window.speechSynthesis.cancel();
+  }
+}
+refreshLock.addEventListener('click', ()=> loadLockdownJson());
+$('shakeBtn').addEventListener('click', ()=>{
+  if(!lockdownEl.classList.contains('active')) return;
+  const card = lockdownEl.querySelector('.lockcard');
+  if(card) card.animate([{transform:'translateY(0)'},{transform:'translateY(-12px) rotate(-1deg)'},{transform:'translateY(10px) rotate(1deg)'},{transform:'translateY(0)'}],{duration:800,easing:'ease-in-out'});
+});
+
+/* Poll lockdown.json */
+async function loadLockdownJson(){
+  try{
+    const res = await fetch('lockdown.json', { cache:'no-store' });
+    if(!res.ok) throw new Error('lockdown.json not found');
+    const cfg = await res.json();
+    LOCKCFG = Object.assign({ active:false, visual:{ sirenVolume:0.8 } }, cfg);
+    applyLockdown(LOCKCFG);
+    setTimeout(loadLockdownJson, (LOCKCFG.refreshSeconds || 30) * 1000);
+  }catch(e){
+    LOCKCFG = { active:false, visual:{ sirenVolume:0.8 }, title:'', message:'' };
+    applyLockdown(LOCKCFG);
+  }
+}
+
+/* Encode / Decode with UNK fallback */
+const channelSelect = $('channelSelect'), delimiter = $('delimiter'), inputArea = $('inputArea'), outputBox = $('outputBox');
+const coverage = $('coverage'), tokens = $('tokens'), speed = $('speed'), entropyEl = $('entropy');
+
+function encode(channel, delim, text){
+  const t0 = now();
+  const map = KEYMAP[channel] || {};
+  const toks = [];
+  for(const ch of Array.from(text)){
+    if(Object.prototype.hasOwnProperty.call(map, ch)) toks.push(map[ch]);
+    else toks.push(`${channel}_UNK_${hexOfChar(ch)}`);
+  }
+  return { out: toks.join(delim), tokens: toks, elapsed: now() - t0 };
+}
+
+function decode(channel, delim, tokenString){
+  const t0 = now();
+  const map = KEYMAP[channel] || {};
+  const rev = {};
+  for(const k in map) rev[map[k]] = k;
+  const toks = tokenString ? tokenString.split(delim).filter(Boolean) : [];
+  const chars = toks.map(tk=>{
+    const m = tk.match(/^(.+?)_UNK_([0-9a-fA-F]+)$/);
+    if(m) return charFromHex(m[2]);           // handles ANY channel_UNK_hex
+    if(rev[tk] !== undefined) return rev[tk]; // mapped token
+    return '?';
+  });
+  return { text: chars.join(''), toks, elapsed: now() - t0 };
+}
+
+/* UI wiring */
+$('encodeBtn').addEventListener('click', ()=>{
+  const ch = channelSelect.value; const d = delimiter.value || ' '; const txt = inputArea.value || '';
+  if(!ch || !KEYMAP[ch]){ alert('Choose a valid channel'); return; }
+  const r = encode(ch, d, txt);
+  outputBox.textContent = r.out;
+  coverage.textContent = Math.round(Object.keys(KEYMAP[ch]).length / 256 * 100) + '%';
+  tokens.textContent = `${r.tokens.length} / ${r.out.length}`;
+  speed.textContent = `${Math.round(r.elapsed)}ms`;
+  entropyEl.textContent = estimateEntropy(r.out).toFixed(2);
+});
+$('decodeBtn').addEventListener('click', ()=>{
+  const ch = channelSelect.value; const d = delimiter.value || ' '; const tok = outputBox.textContent || '';
+  const r = decode(ch, d, tok);
+  inputArea.value = r.text;
+  coverage.textContent = Math.round(Object.keys(KEYMAP[ch]||{}).length / 256 * 100) + '%';
+  tokens.textContent = `${r.toks.length} / ${tok.length}`;
+  speed.textContent = `${Math.round(r.elapsed)}ms`;
+  entropyEl.textContent = estimateEntropy(tok).toFixed(2);
+});
+$('copyBtn').addEventListener('click', async ()=>{
+  const txt = outputBox.textContent || ''; if(!txt) return;
+  try{ await navigator.clipboard.writeText(txt); }catch(e){}
+});
+sirenVol.addEventListener('input', ()=>{
+  const v = Number(sirenVol.value || 0.8);
+  if(SIREN.gain && SIREN.ctx) try{ SIREN.gain.gain.setTargetAtTime(Math.min(1.2,v), SIREN.ctx.currentTime, 0.02); }catch(e){}
+});
+
+/* Init */
+(async function init(){
+  // single channel already present in markup; start polling lockdown.json
+  await loadLockdownJson();
+})();
+</script>
+</body>
+</html>
