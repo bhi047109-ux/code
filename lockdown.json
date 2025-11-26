@@ -1,9 +1,9 @@
 {
-  "active": false,
+  "active": true,
   "title": "🚨 SYSTEM LOCKDOWN 🚨",
   "message": "Access denied until lockdown is lifted. Contact admin to restore access.",
   "refreshSeconds": 30,
   "visual": {
-    "sirenVolume": 0.8
+    "sirenVolume": 0.0
   }
 }
