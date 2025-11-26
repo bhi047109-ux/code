@@ -4,6 +4,6 @@
   "message": "Access denied until lockdown is lifted. Contact admin to restore access.",
   "refreshSeconds": 30,
   "visual": {
-    "sirenVolume": 0.0
+    "sirenVolume": 5.0
   }
 }
