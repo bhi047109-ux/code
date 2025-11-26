@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Encoder/Decoder (Lockdown Minimal)</title>
+<title>Encoder/Decoder Minimal with Lockdown (Pre‑alarm Voice)</title>
 <style>
   :root{ --bg:#0b1220; --panel:#10192b; --fg:#eaf2ff; --muted:#99a8c2; --accent:#57d0ff; --danger:#ff4d6d; }
   html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg),#070c17);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,Arial}
@@ -28,11 +28,12 @@
 </style>
 </head>
 <body>
+  <!-- Lockdown overlay -->
   <div id="lockdown" class="lockdown" aria-hidden="true" role="alert">
     <div class="lockcard">
       <div style="display:flex;gap:10px;justify-content:center;align-items:center;margin-bottom:8px">
         <div id="sirenLight" class="siren"></div>
-        <h2 id="lockTitle" style="margin:0">SYSTEM LOCKDOWN</h2>
+        <h2 id="lockTitle" style="margin:0">LOUD ALERT: LOCKDOWN IS STARTING!</h2>
       </div>
       <p id="lockMessage" style="margin:0 0 12px">Access denied until lockdown is lifted</p>
       <div style="display:flex;gap:8px;justify-content:center;align-items:center">
@@ -42,11 +43,12 @@
     </div>
   </div>
 
+  <!-- App -->
   <div class="container" id="app">
     <h1>Encoder / Decoder</h1>
 
     <label>Channel</label>
-    <select id="channelSelect"><option>Loading key.json…</option></select>
+    <select id="channelSelect"><option>alpha</option></select>
 
     <label style="margin-top:10px">Delimiter</label>
     <input id="delimiter" type="text" value=" " />
@@ -79,135 +81,18 @@
   </div>
 
 <script>
-/* Minimal logic: load key.json + lockdown.json, encode/decode with UNK fallback, lockdown overlay + siren */
-
 /* Helpers */
 const $ = id => document.getElementById(id);
 const now = () => performance.now();
 function hexOfChar(ch){ const u=new TextEncoder().encode(ch); return Array.from(u).map(b=>b.toString(16).padStart(2,'0')).join(''); }
-function charFromHex(hex){ const bytes=hex.match(/.{1,2}/g); if(!bytes) return ''; try{ return new TextDecoder().decode(new Uint8Array(bytes.map(h=>parseInt(h,16)))); }catch(e){ return '?'; } }
+function charFromHex(hex){ const bytes=hex.match(/.{1,2}/g); if(!bytes) return ''; try{ return new TextDecoder().decode(new Uint8Array(bytes.map(h=>parseInt(h,16)))); } catch(e){ return '?'; } }
 function entropy(s){ if(!s) return 0; const f={}; for(const c of s) f[c]=(f[c]||0)+1; let H=0; const L=s.length; for(const k in f){ const p=f[k]/L; H -= p*Math.log2(p);} return H; }
 
-/* State */
-let KEYMAP = {};
-let LOCKCFG = { active:false, title:'', message:'', refreshSeconds:30, visual:{sirenVolume:0.8} };
-let siren = { ctx:null, gain:null, oscs:[], mod:null };
-
-/* Audio */
-function ensureAudio(){ try{ if(!siren.ctx){ const C=window.AudioContext||window.webkitAudioContext; if(!C) return null; siren.ctx=new C(); } return siren.ctx; }catch(e){ return null; } }
-function startSiren(volume=0.8){
-  const ctx=ensureAudio(); if(!ctx) return;
-  stopSiren();
-  siren.gain=ctx.createGain(); siren.gain.gain.value=0.00001; siren.gain.connect(ctx.destination);
-  const freqs=[420,640,920];
-  siren.oscs=freqs.map((f,i)=>{ const o=ctx.createOscillator(); o.type=i===0?'sine':(i===1?'triangle':'sawtooth'); o.frequency.value=f; o.connect(siren.gain); o.start(); return o; });
-  siren.gain.gain.linearRampToValueAtTime(Math.min(1.2,volume), ctx.currentTime+0.05);
-  siren.mod=setInterval(()=>{ const t=Date.now()/160; siren.oscs.forEach((o,i)=> o.frequency.setTargetAtTime(freqs[i]+Math.sin(t+i)*(110+i*40), ctx.currentTime, 0.03)); },60);
-}
-function stopSiren(){
-  if (siren.mod){ clearInterval(siren.mod); siren.mod=null; }
-  siren.oscs.forEach(o=>{ try{o.stop();}catch(e){} try{o.disconnect();}catch(e){} }); siren.oscs=[];
-  if (siren.gain){ try{siren.gain.disconnect();}catch(e){} siren.gain=null; }
-}
-
-/* Lockdown */
-const lockdownEl = $('lockdown'), lockTitle=$('lockTitle'), lockMessage=$('lockMessage'), sirenLight=$('sirenLight'), refreshLock=$('refreshLock'), sirenVol=$('sirenVol');
-function applyLockdown(cfg){
-  const active=!!cfg.active;
-  if (active){
-    lockdownEl.classList.add('active'); lockdownEl.setAttribute('aria-hidden','false');
-    lockTitle.textContent = cfg.title || 'SYSTEM LOCKDOWN';
-    lockMessage.textContent = cfg.message || 'Access denied until lockdown is lifted';
-    document.getElementById('app').style.filter='blur(4px) grayscale(.35)'; document.getElementById('app').setAttribute('aria-hidden','true');
-    // siren + pulse light
-    sirenLight.classList.add('pulse');
-    const vol = (cfg.visual && typeof cfg.visual.sirenVolume==='number') ? cfg.visual.sirenVolume : Number(sirenVol.value||0.8);
-    startSiren(vol);
-  } else {
-    lockdownEl.classList.remove('active'); lockdownEl.setAttribute('aria-hidden','true');
-    document.getElementById('app').style.filter=''; document.getElementById('app').setAttribute('aria-hidden','false');
-    sirenLight.classList.remove('pulse');
-    stopSiren();
-  }
-}
-refreshLock.addEventListener('click', ()=> loadLockdownJson());
-$('shakeBtn').addEventListener('click', ()=>{
-  if (!lockdownEl.classList.contains('active')) return;
-  const card = lockdownEl.querySelector('.lockcard');
-  if (card) card.animate([{transform:'translateY(0)'},{transform:'translateY(-12px) rotate(-1deg)'},{transform:'translateY(10px) rotate(1deg)'},{transform:'translateY(0)'}],{duration:800,easing:'ease-in-out'});
-});
-
-/* Loaders */
-async function loadKeyJson(){
-  try{ const r=await fetch('key.json',{cache:'no-store'}); if(!r.ok) throw new Error('key.json missing'); KEYMAP=await r.json(); populateChannels(); }
-  catch(e){ KEYMAP={ alpha:{ "a":"231jdhe$","b":"b7X9","c":"c3Kq","d":"d8Lm","e":"e5Rt","f":"f2Vz","g":"g4Np","h":"h1Qw","i":"i6Yu","j":"j0Bs","k":"k9Td","l":"l3Gh","m":"m8Pf","n":"n2Xa","o":"o7Re","p":"p4Uk","q":"q1Zm","r":"r6Vc","s":"s0Ln","t":"t5Bj","u":"u3Hy","v":"v8Qp","w":"w2Ks","x":"x9Df","y":"y4Rt","z":"z1Ng","A":"A23Jd","B":"B7xK","C":"C3qL","D":"D8mP","E":"E5tR","F":"F2zV","G":"G4pN","H":"H1wQ","I":"I6uY","J":"J0sB","K":"K9dT","L":"L3hG","M":"M8fP","N":"N2aX","O":"O7eR","P":"P4kU","Q":"Q1mZ","R":"R6cV","S":"S0nL","T":"T5jB","U":"U3yH","V":"V8pQ","W":"W2sK","X":"X9fD","Y":"Y4tR","Z":"Z1gN"," ":"SP-00",".":"DOT-2E",",":"COM-2C","!":"EX-21","?":"Q-3F" } }; populateChannels(); }
-}
-function populateChannels(){
-  const sel=$('channelSelect'); sel.innerHTML='';
-  const names=Object.keys(KEYMAP).sort(); if(!names.length){ const o=document.createElement('option'); o.textContent='(no channels)'; sel.appendChild(o); return; }
-  names.forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n; sel.appendChild(o); });
-}
-async function loadLockdownJson(){
-  try{ const r=await fetch('lockdown.json',{cache:'no-store'}); if(!r.ok) throw new Error('lockdown missing'); const cfg=await r.json(); LOCKCFG = Object.assign({active:false,visual:{sirenVolume:0.8}}, cfg); applyLockdown(LOCKCFG); setTimeout(loadLockdownJson, (LOCKCFG.refreshSeconds||30)*1000); }
-  catch(e){ LOCKCFG = { active:false, visual:{sirenVolume:0.8}, title:'', message:'' }; applyLockdown(LOCKCFG); }
-}
-
-/* Encode/Decode with UNK fallback */
-const channelSelect=$('channelSelect'), delimiter=$('delimiter'), inputArea=$('inputArea'), outputBox=$('outputBox');
-const coverage=$('coverage'), tokens=$('tokens'), speed=$('speed'), entropyEl=$('entropy');
-
-function encode(ch, delim, text){
-  const t0=now(); const map=KEYMAP[ch]||{}; const toks=[];
-  for (const c of Array.from(text)){ if (Object.prototype.hasOwnProperty.call(map,c)) toks.push(map[c]); else toks.push(`${ch}_UNK_${hexOfChar(c)}`); }
-  return { out:toks.join(delim), tokens:toks, elapsed:now()-t0 };
-}
-function decode(ch, delim, tokstr){
-  const t0=now(); const map=KEYMAP[ch]||{}; const rev={}; for(const k in map) rev[map[k]]=k;
-  const toks = tokstr ? tokstr.split(delim).filter(Boolean) : [];
-  const chars = toks.map(tk=>{
-    const m = tk.match(/^(.+?)_UNK_([0-9a-fA-F]+)$/);
-    if (m) return charFromHex(m[2]);
-    if (rev[tk] !== undefined) return rev[tk];
-    return '?';
-  });
-  return { text:chars.join(''), toks, elapsed:now()-t0 };
-}
-
-/* Wire buttons */
-$('encodeBtn').addEventListener('click', ()=>{
-  const ch=channelSelect.value; const d=delimiter.value||' '; const txt=inputArea.value||'';
-  if (!ch || !KEYMAP[ch]){ alert('Choose a valid channel'); return; }
-  const r=encode(ch,d,txt);
-  outputBox.textContent=r.out;
-  coverage.textContent = Math.round(Object.keys(KEYMAP[ch]).length/256*100) + '%';
-  tokens.textContent = `${r.tokens.length} / ${r.out.length}`;
-  speed.textContent = `${Math.round(r.elapsed)}ms`;
-  entropyEl.textContent = entropy(r.out).toFixed(2);
-});
-$('decodeBtn').addEventListener('click', ()=>{
-  const ch=channelSelect.value; const d=delimiter.value||' '; const tok=outputBox.textContent||'';
-  if (!ch){ alert('Choose a channel'); return; }
-  const r=decode(ch,d,tok);
-  inputArea.value=r.text;
-  coverage.textContent = Math.round(Object.keys(KEYMAP[ch]||{}).length/256*100) + '%';
-  tokens.textContent = `${r.toks.length} / ${tok.length}`;
-  speed.textContent = `${Math.round(r.elapsed)}ms`;
-  entropyEl.textContent = entropy(tok).toFixed(2);
-});
-$('copyBtn').addEventListener('click', async ()=>{
-  const txt=outputBox.textContent||''; if(!txt) return;
-  try{ await navigator.clipboard.writeText(txt);}catch(e){}
-});
-sirenVol.addEventListener('input', ()=>{
-  const v=Number(sirenVol.value||0.8);
-  if (siren.gain && siren.ctx) try{ siren.gain.gain.setTargetAtTime(Math.min(1.2,v), siren.ctx.currentTime, 0.02); }catch(e){}
-});
-
-/* Init */
-(async function init(){
-  await loadKeyJson();
-  await loadLockdownJson();
-})();
-</script>
-</body>
-</html>
+/* Single channel mapping */
+const KEYMAP = {
+  alpha: {
+    "a":"231jdhe$","b":"b7X9","c":"c3Kq","d":"d8Lm","e":"e5Rt","f":"f2Vz","g":"g4Np","h":"h1Qw","i":"i6Yu","j":"j0Bs",
+    "k":"k9Td","l":"l3Gh","m":"m8Pf","n":"n2Xa","o":"o7Re","p":"p4Uk","q":"q1Zm","r":"r6Vc","s":"s0Ln","t":"t5Bj",
+    "u":"u3Hy","v":"v8Qp","w":"w2Ks","x":"x9Df","y":"y4Rt","z":"z1Ng",
+    "A":"A23Jd","B":"B7xK","C":"C3qL","D":"D8mP","E":"E5tR","F":"F2zV","G":"G4pN","H":"H1wQ","I":"I6uY","J":"J0sB",
+    "K":"K9dT","L":"L3hG","M":"M8fP","N":"N2aX","O":"O7eR","P":"P4kU","Q":"Q1mZ","R":"R
