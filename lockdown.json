@@ -1,9 +1,9 @@
 {
-  "active": false,
-  "title": "🚨 SYSTEM LOCKDOWN 🚨",
-  "message": "Access denied until lockdown is lifted. Contact admin to restore access.",
+  "active": true,
+  "title": "🚨 LOUD ALERT: LOCKDOWN IS STARTING!",
+  "message": "Attention: Lockdown is starting. Please mute this tab or device now.",
   "refreshSeconds": 30,
   "visual": {
-    "sirenVolume": 0.8
+    "sirenVolume": 0.9
   }
 }
