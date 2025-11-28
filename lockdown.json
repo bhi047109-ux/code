@@ -1,7 +1,8 @@
 {
   "active": true,
   "title": "🚨 LOUD ALERT: LOCKDOWN IS STARTING!",
-  "message": "Attention: Lockdown is starting. Please mute this tab or device now.",
+  "message": "Please mute your device immediately. Lockdown in effect.",
+  "messageSpeech": "Attention everyone, lockdown is now active. Please mute your device immediately.",
   "refreshSeconds": 30,
   "visual": {
     "sirenVolume": 0.9
