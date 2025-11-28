@@ -2,9 +2,10 @@
   "active": true,
   "title": "🚨 LOUD ALERT: LOCKDOWN IS STARTING!",
   "message": "Please mute your device immediately. Lockdown in effect.",
-  "messageSpeech": "Attention everyone, i sharted  lockdown is now active. Please mute your device immediately.",
-  "refreshSeconds": 30,
+  "messageSpeech": "Attention everyone, lockdown is now active. Please mute your device immediately.",
+  "refreshSeconds": 10,
   "visual": {
     "sirenVolume": 0.9
   }
 }
+
