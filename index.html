@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Encoder / Decoder Minimal</title>
+<title>Encoder / Decoder with External Key</title>
 <!-- Embedded SVG favicon to avoid 404 -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%23ffffff'/%3E%3Ctext x='50' y='58' font-size='48' text-anchor='middle' fill='%230b1220' font-family='system-ui,Segoe UI,Roboto,Arial'%3EE%3C/text%3E%3C/svg%3E">
 <style>
@@ -25,7 +25,7 @@
 </head>
 <body>
 <div class="container" id="app">
-  <h1>Encoder / Decoder</h1>
+  <h1>Encoder / Decoder (External Key)</h1>
   <label>Channel</label>
   <select id="channelSelect"><option value="alpha">alpha</option></select>
   <label style="margin-top:10px">Delimiter</label>
@@ -86,17 +86,27 @@ function estimateEntropy(s) {
   return H;
 }
 
-const KEYMAP = {
-  alpha: {
-    a: '231jdhe$', b: 'b7X9', c: 'c3Kq', d: 'd8Lm', e: 'e5Rt', f: 'f2Vz', g: 'g4Np', h: 'h1Qw', i: 'i6Yu', j: 'j0Bs',
-    k: 'k9Td', l: 'l3Gh', m: 'm8Pf', n: 'n2Xa', o: 'o7Re', p: 'p4Uk', q: 'q1Zm', r: 'r6Vc', s: 's0Ln', t: 't5Bj',
-    u: 'u3Hy', v: 'v8Qp', w: 'w2Ks', x: 'x9Df', y: 'y4Rt', z: 'z1Ng',
-    A: 'A23Jd', B: 'B7xK', C: 'C3qL', D: 'D8mP', E: 'E5tR', F: 'F2zV', G: 'G4pN', H: 'H1wQ', I: 'I6uY', J: 'J0sB',
-    K: 'K9dT', L: 'L3hG', M: 'M8fP', N: 'N2aX', O: 'O7eR', P: 'P4kU', Q: 'Q1mZ', R: 'R6cV', S: 'S0nL', T: 'T5jB',
-    U: 'U3yH', V: 'V8pQ', W: 'W2sK', X: 'X9fD', Y: 'Y4tR', Z: 'Z1gN',
-    ' ': 'SP-00', '.': 'DOT-2E', ',': 'COM-2C', '!': 'EX-21', '?': 'Q-3F'
+let KEYMAP = {};
+
+async function loadKey() {
+  try {
+    const resp = await fetch('key.json');
+    if (!resp.ok) throw new Error('Failed to load key.json');
+    KEYMAP = await resp.json();
+    updateCoverage();
+  } catch (e) {
+    alert('Error loading key.json: ' + e.message);
   }
-};
+}
+
+function updateCoverage() {
+  const ch = $('channelSelect').value;
+  if (KEYMAP[ch]) {
+    $('coverage').textContent = Math.round(Object.keys(KEYMAP[ch]).length / 256 * 100) + '%';
+  } else {
+    $('coverage').textContent = '-';
+  }
+}
 
 function encode(channel, delim, text) {
   const t0 = now();
@@ -134,7 +144,7 @@ $('encodeBtn').addEventListener('click', () => {
   }
   const r = encode(ch, d, txt);
   $('outputBox').textContent = r.out;
-  $('coverage').textContent = Math.round(Object.keys(KEYMAP[ch]).length / 256 * 100) + '%';
+  updateCoverage();
   $('tokens').textContent = `${r.tokens.length} / ${r.out.length}`;
   $('speed').textContent = `${Math.round(r.elapsed)}ms`;
   $('entropy').textContent = estimateEntropy(r.out).toFixed(2);
@@ -146,7 +156,7 @@ $('decodeBtn').addEventListener('click', () => {
   const tok = $('outputBox').textContent || '';
   const r = decode(ch, d, tok);
   $('inputArea').value = r.text;
-  $('coverage').textContent = Math.round(Object.keys(KEYMAP[ch] || {}).length / 256 * 100) + '%';
+  updateCoverage();
   $('tokens').textContent = `${r.toks.length} / ${tok.length}`;
   $('speed').textContent = `${Math.round(r.elapsed)}ms`;
   $('entropy').textContent = estimateEntropy(tok).toFixed(2);
@@ -159,6 +169,8 @@ $('copyBtn').addEventListener('click', async () => {
     await navigator.clipboard.writeText(txt);
   } catch (e) { }
 });
+
+loadKey();
 </script>
 </body>
 </html>
